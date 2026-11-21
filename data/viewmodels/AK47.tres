@@ -10,8 +10,13 @@ RigScene = ExtResource("4_reference")
 AttachBoneName = "PBody"
 AttachPosition = Vector3(0, -0.02, -0.196)
 AttachScale = Vector3(0.98, 0.98, 0.98)
-ViewPosition = Vector3(0.06, -0.261, -0.043)
+ViewPosition = Vector3(0.055, -0.265, -0.025)
 ViewRotationDegrees = Vector3(0, 180, 0)
+AimPositionOffset = Vector3(-0.101, 0.0735, 0.04)
+AimRotationOffsetDegrees = Vector3(0, 0, 0.8)
+AimTransitionSeconds = 0.14
+HasScope = false
+IdlePoseTime = -1.0
 ArmMeshNames = ["arms"]
 OriginalWeaponMeshNames = ["Ak", "Mag_2"]
 OriginalMagazineMeshNames = ["Mag_2"]
@@ -25,6 +30,10 @@ ClipMap = Dictionary[String, String]({
 "reload_full": "Rig|AK_Reload_full",
 "run": "Rig|AK_Run",
 "walk": "Rig|AK_Walk"
+})
+ClipSpeedMultipliers = Dictionary[String, float]({
+"reload": 1.15,
+"reload_full": 1.15
 })
 NormalizationReferenceRig = ExtResource("4_reference")
 NormalizationReferenceArmMeshNames = ["arms"]

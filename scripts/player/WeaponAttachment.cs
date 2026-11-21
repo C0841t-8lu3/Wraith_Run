@@ -12,6 +12,7 @@ public partial class WeaponAttachment : Node3D
 {
 	// Godot's glTF importer sanitizes imported bone names, so match the stable hand-name fragment.
 	[Export] public string HandBoneFragment { get; set; } = "righthand";
+	[Export] public string LeftHandBoneFragment { get; set; } = "lefthand";
 
 	/// <summary>Skip audio nodes when this attachment is used only to preview a weapon in the UI.</summary>
 	[Export] public bool SkipAudio { get; set; }
@@ -85,6 +86,7 @@ public partial class WeaponAttachment : Node3D
 	private Node? _armature;
 	private Skeleton3D? _skeleton;
 	private BoneAttachment3D? _currentAttachment;
+	private BoneAttachment3D? _currentLeftAttachment;
 	private readonly RandomNumberGenerator _rng = new();
 
 	/// <summary>World-space muzzle point, or null for melee / a weapon with no configured muzzle.
@@ -142,6 +144,22 @@ public partial class WeaponAttachment : Node3D
 				oldAttachment.QueueFree();
 			}
 		}
+
+		if (_currentLeftAttachment != null && IsInstanceValid(_currentLeftAttachment))
+		{
+			_currentLeftAttachment.GetParent()?.RemoveChild(_currentLeftAttachment);
+			_currentLeftAttachment.QueueFree();
+			_currentLeftAttachment = null;
+		}
+		else
+		{
+			var oldLeftAttachment = (_armature ?? GetParent()).FindChild("WeaponLeftBoneAttachment", true, false);
+			if (oldLeftAttachment != null)
+			{
+				oldLeftAttachment.GetParent()?.RemoveChild(oldLeftAttachment);
+				oldLeftAttachment.QueueFree();
+			}
+		}
 		_fireAudio = null;
 		_reloadAudio = null;
 		_emptyAudio = null;
@@ -166,6 +184,8 @@ public partial class WeaponAttachment : Node3D
 			GD.PushError($"Weapon attachment could not find a bone containing '{HandBoneFragment}'. Actual bones: {available}");
 			return;
 		}
+
+		skeleton.ResetBonePoses();
 
 		var attachment = new BoneAttachment3D
 		{
@@ -325,7 +345,11 @@ public partial class WeaponAttachment : Node3D
 
 	private void AddModel(Node3D grip, WeaponData weapon)
 	{
-		if (string.IsNullOrEmpty(weapon.ModelScenePath))
+		string modelPath = (weapon.WeaponClass == "Melee" && WeaponSwitcher.ActiveMeleeWeapon == "Sledge Hammer")
+			? "res://art/weapons/Melee/SledgeHammer.glb"
+			: weapon.ModelScenePath;
+
+		if (string.IsNullOrEmpty(modelPath))
 		{
 			// A weapon with no art is still a usable weapon - it fires, reloads, damages and makes
 			// noise. Warn so it is visible, but do not fail the equip.
@@ -333,15 +357,26 @@ public partial class WeaponAttachment : Node3D
 			return;
 		}
 
-		var model = ResourceLoader.Load<PackedScene>(weapon.ModelScenePath)?.Instantiate<Node3D>();
+		var model = ResourceLoader.Load<PackedScene>(modelPath)?.Instantiate<Node3D>();
 		if (model == null)
 		{
-			GD.PushError($"Weapon attachment could not load {weapon.ModelScenePath}.");
+			GD.PushError($"Weapon attachment could not load {modelPath}.");
 			return;
 		}
 		model.Name = "EquippedWeapon";
 		model.Scale = Vector3.One * (weapon.ModelScale <= 0.0f ? 1.0f : weapon.ModelScale);
-		ApplyFallbackTextures(model, weapon.WeaponName);
+		if (weapon.WeaponName == "Desert Eagle")
+		{
+			foreach (Node node in model.FindChildren("*", "MeshInstance3D", true, false))
+			{
+				if (node is MeshInstance3D mi)
+					ViewModelBase.ApplyDesertEagleMaterial(mi);
+			}
+		}
+		else
+		{
+			ApplyFallbackTextures(model, weapon.WeaponName);
+		}
 		grip.AddChild(model);
 	}
 

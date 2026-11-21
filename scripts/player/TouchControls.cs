@@ -139,9 +139,6 @@ public partial class TouchControls : CanvasLayer
             VehicleHold("GAS", "vehicle_gas", 1f, 1f, -size * 1.1f, -size * 2.25f, -size * 0.1f, -size * 1.25f);
             VehicleHold("BRAKE", "vehicle_brake", 1f, 1f, -size * 2.2f, -size * 1.2f, -size * 1.2f, -size * 0.2f);
             VehicleHold("HANDBRAKE", "vehicle_handbrake", 1f, 1f, -size * 3.3f, -size * 2.25f, -size * 2.3f, -size * 1.25f);
-            var camera = VehicleButton("CAM ◉", size * 0.78f);
-            MenuStyle.Place(camera, 0f, 0f, 0f, 0f, 22f, 100f, 22f + size * 0.78f, 100f + size * 0.78f);
-            camera.ButtonDown += () => _movement.CurrentVehicle?.ToggleDriverCamera((int)_player.GetMultiplayerAuthority());
         }
         else
         {
@@ -154,7 +151,7 @@ public partial class TouchControls : CanvasLayer
             aim.ButtonUp += () => { if (settings.HoldToAds) Input.ActionRelease("aim"); };
         }
         var exit = VehicleButton("EXIT", size * 0.72f);
-        MenuStyle.Place(exit, 0f, 0f, 0f, 0f, 22f, 100f + size, 22f + size * 0.72f, 100f + size * 1.72f);
+        MenuStyle.Place(exit, 0f, 0f, 0f, 0f, 22f, 100f, 22f + size * 0.72f, 100f + size * 0.72f);
         exit.ButtonDown += () => Pulse("vehicle_interact");
     }
 

@@ -104,6 +104,7 @@ public partial class SettingsManager : Node
     public VSyncOption VSync = VSyncOption.On;
     public int MaxFps;
     public float RenderScale = 1.0f;
+    public bool ShowPerformanceOverlay = true;
 
     // ---- Audio --------------------------------------------------------------------------------
     public float MasterVolume = 1.0f;
@@ -188,6 +189,7 @@ public partial class SettingsManager : Node
             VSync = (VSyncOption)(int)file.GetValue(Section, "vsync", (int)VSync);
             MaxFps = (int)file.GetValue(Section, "max_fps", MaxFps);
             RenderScale = (float)file.GetValue(Section, "render_scale", RenderScale);
+            ShowPerformanceOverlay = (bool)file.GetValue(Section, "show_performance_overlay", ShowPerformanceOverlay);
 
             MasterVolume = (float)file.GetValue(Section, "master_volume", MasterVolume);
             MasterMuted = (bool)file.GetValue(Section, "master_muted", MasterMuted);
@@ -246,6 +248,7 @@ public partial class SettingsManager : Node
         file.SetValue(Section, "vsync", (int)VSync);
         file.SetValue(Section, "max_fps", MaxFps);
         file.SetValue(Section, "render_scale", RenderScale);
+        file.SetValue(Section, "show_performance_overlay", ShowPerformanceOverlay);
 
         file.SetValue(Section, "master_volume", MasterVolume);
         file.SetValue(Section, "master_muted", MasterMuted);

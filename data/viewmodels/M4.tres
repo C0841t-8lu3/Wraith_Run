@@ -13,7 +13,8 @@ ViewPosition = Vector3(0.12, -0.1, -0.04)
 ViewRotationDegrees = Vector3(0, 0, 0)
 ViewScale = Vector3(0.042, 0.042, 0.042)
 HasScope = false
-AimPositionOffset = Vector3(-0.182, 0.102, 0.04)
+AimPositionOffset = Vector3(-0.192, 0.098, 0.04)
+AimRotationOffsetDegrees = Vector3(0, -3.2, 0)
 AimTransitionSeconds = 0.12
 ArmMeshNames = Array[String](["sleeve", "hardknuckle"])
 OriginalWeaponMeshNames = Array[String](["BARREL", "BARREL_001", "BARREL_002"])
@@ -29,7 +30,8 @@ ClipMap = Dictionary[String, String]({
 "walk": "Armature|Idle"
 })
 ClipSpeedMultipliers = Dictionary[String, float]({
-"fire": 2.5
+"fire": 2.5,
+"reload": 1.7
 })
 NormalizationReferenceRig = ExtResource("2_rig")
 NormalizationReferenceArmMeshNames = Array[String](["sleeve", "hardknuckle"])

@@ -38,8 +38,11 @@ public partial class PauseMenu : CanvasLayer
             SetProcessInput(false);
             return;
         }
-        SetProcess(false);
-        _tablet = new HubTablet { Name = "GameTablet", GamePlayer = Player };
+        var tabletScene = ResourceLoader.Load<PackedScene>("res://scenes/HubTablet.tscn")
+            ?? ResourceLoader.Load<PackedScene>("res://scenes/ui/HubTablet.tscn");
+        _tablet = tabletScene != null ? tabletScene.Instantiate<HubTablet>() : new HubTablet { GamePlayer = Player };
+        _tablet.Name = "GameTablet";
+        _tablet.GamePlayer = Player;
         AddChild(_tablet);
         Multiplayer.ServerDisconnected += OnServerDisconnected;
     }
@@ -67,12 +70,20 @@ public partial class PauseMenu : CanvasLayer
 
         bool pausePressed = @event.IsActionPressed(GameUiState.PauseAction);
         bool backPressed = _tablet.IsOpen && @event.IsActionPressed("ui_cancel");
-        if (!pausePressed && !backPressed) return;
+        bool equalPressed = @event is InputEventKey ek && ek.Pressed && !ek.Echo &&
+                            (ek.Keycode == Key.Equal || ek.PhysicalKeycode == Key.Equal) &&
+                            !_tablet.TypingOnScreen();
+        if (!pausePressed && !backPressed && !equalPressed) return;
 
         // The match-results screen owns the whole screen; the menu must not open under it.
         if (GameUiState.ResultsOpen) return;
 
         GetViewport().SetInputAsHandled();
+        if (equalPressed)
+        {
+            Toggle();
+            return;
+        }
         // With the "leave this match?" question showing, Escape / Back answers NO rather than closing everything.
         if (_tablet.IsOpen && _tablet.CancelLeaveQuestion()) return;
         // Escape mirrors the tablet's visible BACK control before it closes the device.

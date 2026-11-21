@@ -38,13 +38,15 @@ public static class OperatorInfo
             if (_operators != null) return _operators;
             _operators = new List<CharacterData>();
             var registry = ResourceLoader.Load<CharacterRegistry>(OperatorRegistryPath);
-            if (registry == null)
+            if (registry != null)
             {
-                GD.PushWarning($"OperatorInfo: could not load {OperatorRegistryPath}.");
-                return _operators;
+                foreach (CharacterData character in registry.Characters)
+                    if (character != null) _operators.Add(character);
             }
-            foreach (CharacterData character in registry.Characters)
-                if (character != null) _operators.Add(character);
+            if (_operators.Count == 0)
+            {
+                _operators.AddRange(CreateDefault12Operators());
+            }
             _operators.Sort((a, b) =>
             {
                 int byClass = a.Class.CompareTo(b.Class);
@@ -52,6 +54,162 @@ public static class OperatorInfo
             });
             return _operators;
         }
+    }
+
+    public static IReadOnlyList<CharacterData> ConvoyRoster => Operators;
+
+    private static List<CharacterData> CreateDefault12Operators()
+    {
+        return new List<CharacterData>
+        {
+            // 4 Drivers
+            new CharacterData
+            {
+                CharacterId = "driver_apex",
+                DisplayName = "Cole \"Apex\" Vance",
+                Class = CharacterData.CharacterClass.Driver,
+                SkillName = "Reinforced Chassis",
+                TacticalDescription = "Reduces incoming vehicle collision damage and small-arms tire damage by 20%.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.72f, 0.45f, 0.22f),
+                PantsColor = new Color(0.2f, 0.2f, 0.2f),
+                AccentColor = new Color(0.85f, 0.35f, 0.1f)
+            },
+            new CharacterData
+            {
+                CharacterId = "driver_shift",
+                DisplayName = "Elena \"Shift\" Rostova",
+                Class = CharacterData.CharacterClass.Driver,
+                SkillName = "Nitrous Overdrive",
+                TacticalDescription = "Grants a 25% faster cooldown and extended active duration on vehicle boost charges.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.65f, 0.5f, 0.3f),
+                PantsColor = new Color(0.18f, 0.18f, 0.22f),
+                AccentColor = new Color(0.9f, 0.6f, 0.15f)
+            },
+            new CharacterData
+            {
+                CharacterId = "driver_ghost",
+                DisplayName = "Tariq \"Ghost\" Al-Mansoor",
+                Class = CharacterData.CharacterClass.Driver,
+                SkillName = "Slipstream",
+                TacticalDescription = "Reduces vehicle signature visibility and enemy turret/pursuer tracking duration.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.4f, 0.42f, 0.45f),
+                PantsColor = new Color(0.15f, 0.16f, 0.18f),
+                AccentColor = new Color(0.3f, 0.7f, 0.85f)
+            },
+            new CharacterData
+            {
+                CharacterId = "driver_tread",
+                DisplayName = "Marcus \"Tread\" Boone",
+                Class = CharacterData.CharacterClass.Driver,
+                SkillName = "Iron Rubber",
+                TacticalDescription = "Improves off-road traction and prevents complete immobilization when tires are shot out.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.55f, 0.38f, 0.25f),
+                PantsColor = new Color(0.25f, 0.22f, 0.2f),
+                AccentColor = new Color(0.75f, 0.5f, 0.2f)
+            },
+            // 4 Shooters
+            new CharacterData
+            {
+                CharacterId = "shooter_viper",
+                DisplayName = "Sloane \"Viper\" Kelly",
+                Class = CharacterData.CharacterClass.Shooter,
+                SkillName = "Precision Stabilizer",
+                TacticalDescription = "Reduces weapon recoil by 15% while firing from inside a moving vehicle.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.28f, 0.35f, 0.25f),
+                PantsColor = new Color(0.18f, 0.2f, 0.16f),
+                AccentColor = new Color(0.85f, 0.2f, 0.2f)
+            },
+            new CharacterData
+            {
+                CharacterId = "shooter_rage",
+                DisplayName = "Dax \"Rage\" Holloway",
+                Class = CharacterData.CharacterClass.Shooter,
+                SkillName = "Hollow-Point Feed",
+                TacticalDescription = "Deals 10% bonus damage against enemy vehicle armor plating and tires.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.38f, 0.32f, 0.28f),
+                PantsColor = new Color(0.16f, 0.15f, 0.15f),
+                AccentColor = new Color(0.95f, 0.4f, 0.1f)
+            },
+            new CharacterData
+            {
+                CharacterId = "shooter_spark",
+                DisplayName = "Kira \"Spark\" Chen",
+                Class = CharacterData.CharacterClass.Shooter,
+                SkillName = "Quick Draw",
+                TacticalDescription = "Increases weapon reload and primary/secondary swap speeds by 20% in combat.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.32f, 0.38f, 0.42f),
+                PantsColor = new Color(0.15f, 0.18f, 0.2f),
+                AccentColor = new Color(1.0f, 0.85f, 0.2f)
+            },
+            new CharacterData
+            {
+                CharacterId = "shooter_flash",
+                DisplayName = "Leo \"Flash\" Sterling",
+                Class = CharacterData.CharacterClass.Shooter,
+                SkillName = "Overclocked Mag",
+                TacticalDescription = "Increases magazine capacity across all assault rifles and SMGs by 15%.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.42f, 0.4f, 0.32f),
+                PantsColor = new Color(0.22f, 0.2f, 0.18f),
+                AccentColor = new Color(0.9f, 0.75f, 0.25f)
+            },
+            // 4 Medics
+            new CharacterData
+            {
+                CharacterId = "medic_pulse",
+                DisplayName = "Maya \"Pulse\" Lin",
+                Class = CharacterData.CharacterClass.Medic,
+                SkillName = "Rapid Triage",
+                TacticalDescription = "Cuts downed teammate revival time in half during on-foot combat.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.6f, 0.65f, 0.68f),
+                PantsColor = new Color(0.22f, 0.24f, 0.26f),
+                AccentColor = new Color(0.9f, 0.15f, 0.2f)
+            },
+            new CharacterData
+            {
+                CharacterId = "medic_patch",
+                DisplayName = "Gus \"Patch\" Gallagher",
+                Class = CharacterData.CharacterClass.Medic,
+                SkillName = "Field Mechanic",
+                TacticalDescription = "Allows on-foot repair tools to restore small amounts of STV/Buggy HP directly in the field.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.52f, 0.5f, 0.44f),
+                PantsColor = new Color(0.26f, 0.24f, 0.22f),
+                AccentColor = new Color(0.85f, 0.25f, 0.15f)
+            },
+            new CharacterData
+            {
+                CharacterId = "medic_stim",
+                DisplayName = "Dr. Zane \"Stim\" Mercer",
+                Class = CharacterData.CharacterClass.Medic,
+                SkillName = "Adrenaline Boost",
+                TacticalDescription = "Healing a teammate grants both operators a 5-second movement and reload speed buff.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.48f, 0.55f, 0.52f),
+                PantsColor = new Color(0.2f, 0.22f, 0.21f),
+                AccentColor = new Color(0.2f, 0.85f, 0.45f)
+            },
+            new CharacterData
+            {
+                CharacterId = "medic_anchor",
+                DisplayName = "Brody \"Anchor\" Hayes",
+                Class = CharacterData.CharacterClass.Medic,
+                SkillName = "Guardian Shell",
+                TacticalDescription = "Grants a +20 HP personal shield buffer while standing within 5 meters of a teammate or vehicle.",
+                MeshScenePath = "res://art/characters/AshenCorvus.fbx",
+                JacketColor = new Color(0.45f, 0.48f, 0.52f),
+                PantsColor = new Color(0.18f, 0.2f, 0.24f),
+                AccentColor = new Color(0.3f, 0.6f, 0.95f)
+            }
+        };
     }
 
     public static CharacterData? Find(string id)
@@ -86,6 +244,7 @@ public static class OperatorInfo
     public static string ClassName(CharacterData.CharacterClass value) => value switch
     {
         CharacterData.CharacterClass.Driver => "DRIVER",
+        CharacterData.CharacterClass.Shooter => "SHOOTER",
         CharacterData.CharacterClass.Fixer => "FIXER",
         CharacterData.CharacterClass.Operator => "OPERATOR",
         CharacterData.CharacterClass.Medic => "MEDIC",
@@ -96,6 +255,7 @@ public static class OperatorInfo
     public static string ClassIcon(CharacterData.CharacterClass value) => value switch
     {
         CharacterData.CharacterClass.Driver => "class-driver",
+        CharacterData.CharacterClass.Shooter => "rifle",
         CharacterData.CharacterClass.Fixer => "class-fixer",
         CharacterData.CharacterClass.Operator => "class-operator",
         CharacterData.CharacterClass.Medic => "class-medic",
@@ -106,6 +266,7 @@ public static class OperatorInfo
     public static string ClassBlurb(CharacterData.CharacterClass value) => value switch
     {
         CharacterData.CharacterClass.Driver => "Keeps the vehicle fast, fed and alive.",
+        CharacterData.CharacterClass.Shooter => "Weapons fire, combat marksmanship and vehicular firepower.",
         CharacterData.CharacterClass.Fixer => "Repairs and armours the vehicle on the move.",
         CharacterData.CharacterClass.Operator => "On-foot fighter and objective specialist.",
         CharacterData.CharacterClass.Medic => "Heals the crew and lays cover smoke.",
@@ -131,6 +292,7 @@ public static class OperatorInfo
         (uint j, uint p, uint a) = data?.Class switch
         {
             CharacterData.CharacterClass.Driver => (0x7a5a2eu, 0x2e2a26u, 0xc8582au),
+            CharacterData.CharacterClass.Shooter => (0x3a4f3du, 0x242d25u, 0xd47a2au),
             CharacterData.CharacterClass.Fixer => (0x3d5a63u, 0x2b2f31u, 0xb59a3cu),
             CharacterData.CharacterClass.Operator => (0x4b5238u, 0x33352cu, 0x1b1b1du),
             CharacterData.CharacterClass.Medic => (0x8a8578u, 0x3a3d35u, 0xa3231du),
@@ -204,13 +366,15 @@ public static class OperatorInfo
 
     public static string WeaponIcon(WeaponData weapon)
     {
-        string cls = weapon.WeaponClass.Replace(" ", string.Empty).ToLowerInvariant();
+        string cls = weapon.WeaponClass.Replace(" ", string.Empty).Replace("-", string.Empty).ToLowerInvariant();
         return cls switch
         {
             "assaultrifle" => "rifle",
-            "smg" => "wpn-smg",
+            "smg" or "pdw" => "wpn-smg",
             "pistol" or "sidearm" => "wpn-pistol",
             "shotgun" => "wpn-shotgun",
+            "melee" => "wpn-melee",
+            "antivehicle" or "launcher" => "wpn-launcher",
             _ => "rifle",
         };
     }

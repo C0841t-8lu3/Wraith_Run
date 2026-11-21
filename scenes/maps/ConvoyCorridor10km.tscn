@@ -1,0 +1,92 @@
+[gd_scene format=3 uid="uid://bvycorridor10k9"]
+
+[ext_resource type="Texture2D" uid="uid://cwdvuh6q86xtg" path="res://art/materials/tex/Road009C_Color.jpg" id="1_road"]
+[ext_resource type="Texture2D" uid="uid://c475p4s7hvwc6" path="res://art/materials/tex/Road009C_Normal.jpg" id="2_road_n"]
+[ext_resource type="Texture2D" uid="uid://21bs1lluw2vn" path="res://art/materials/tex/Concrete044B_Color.jpg" id="3_concrete"]
+[ext_resource type="Texture2D" uid="uid://bt3aub1wbmlkd" path="res://art/materials/tex/Ground106_Color.jpg" id="4_ground"]
+[ext_resource type="Texture2D" uid="uid://cv15ow7qlebo2" path="res://art/hdri/EveningSkyHDRI029B.exr" id="5_sky"]
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_1"]
+panorama = ExtResource("5_sky")
+
+[sub_resource type="Sky" id="Sky_1"]
+sky_material = SubResource("PanoramaSkyMaterial_1")
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 2
+sky = SubResource("Sky_1")
+ambient_light_source = 3
+ambient_light_color = Color(0.65, 0.68, 0.72, 1)
+ambient_light_sky_contribution = 0.85
+ambient_light_energy = 1.1
+tonemap_mode = 3
+tonemap_exposure = 1.05
+
+[sub_resource type="StandardMaterial3D" id="Mat_Road"]
+albedo_texture = ExtResource("1_road")
+normal_enabled = true
+normal_texture = ExtResource("2_road_n")
+uv1_scale = Vector3(5, 2500, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_Barrier"]
+albedo_texture = ExtResource("3_concrete")
+uv1_scale = Vector3(1, 2500, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Mat_Desert"]
+albedo_texture = ExtResource("4_ground")
+uv1_scale = Vector3(80, 2000, 1)
+roughness = 0.95
+
+[node name="ConvoyCorridor10km" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 20, 0)
+light_color = Color(1, 0.95, 0.88, 1)
+light_energy = 1.35
+shadow_enabled = true
+
+[node name="DesertTerrain" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.2, 5000)
+use_collision = true
+size = Vector3(400, 2, 10400)
+material = SubResource("Mat_Desert")
+
+[node name="CorridorRoad" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.45, 5000)
+use_collision = true
+size = Vector3(24, 1, 10000)
+material = SubResource("Mat_Road")
+
+[node name="BarrierLeft" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.3, 0.35, 5000)
+use_collision = true
+size = Vector3(0.6, 0.8, 10000)
+material = SubResource("Mat_Barrier")
+
+[node name="BarrierRight" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.3, 0.35, 5000)
+use_collision = true
+size = Vector3(0.6, 0.8, 10000)
+material = SubResource("Mat_Barrier")
+
+[node name="AttackerBorderLine" type="Marker3D" parent="." groups=["spawn_point", "attacker_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 5)
+
+[node name="DefenderBase" type="Marker3D" parent="." groups=["spawn_point", "defender_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 9950)
+
+[node name="ExtractionObjective" type="Area3D" parent="." groups=["target_checkpoint", "extraction_site"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 9980)
+
+[node name="ExtractionZoneCol" type="CollisionShape3D" parent="ExtractionObjective"]
+
+[node name="Checkpoint1Km" type="Area3D" parent="." groups=["convoy_checkpoint"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 1000)
+
+[node name="Checkpoint5KmChokepoint" type="Area3D" parent="." groups=["convoy_checkpoint", "fortified_chokepoint"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 5000)

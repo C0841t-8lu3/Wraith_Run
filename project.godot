@@ -15,9 +15,10 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Wraith Run"
-run/main_scene="res://scenes/Splash.tscn"
+run/main_scene="res://scenes/hub/WarehouseHub.tscn"
 config/quit_on_go_back=false
 config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
+boot_splash/show_image=false
 config/icon="res://icon.png"
 
 [audio]
@@ -29,6 +30,9 @@ buses/default_bus_layout="uid://cxf41caack6da"
 LanSession="*res://scripts/network/LanSession.cs"
 KillFeed="*res://scripts/autoloads/KillFeed.cs"
 MatchManager="*res://scripts/autoloads/MatchManager.cs"
+GameManager="*res://scripts/autoloads/GameManager.cs"
+LanDiscoveryManager="*res://scripts/autoloads/LanDiscoveryManager.cs"
+ScoreAndProgression="*res://scripts/autoloads/ScoreAndProgression.cs"
 SettingsManager="*res://scripts/autoloads/SettingsManager.cs"
 MatchStats="*res://scripts/autoloads/MatchStats.cs"
 CareerTracker="*res://scripts/account/CareerTracker.cs"
@@ -38,6 +42,7 @@ LoadingScreen="*res://scripts/autoloads/LoadingScreen.cs"
 UiSounds="*res://scripts/ui/UiSounds.cs"
 AudioPool="*res://scripts/player/AudioPool.cs"
 VFXPool="*res://scripts/player/VFXPool.cs"
+OperatorRotationManager="*res://scripts/autoloads/OperatorRotationManager.cs"
 
 [display]
 

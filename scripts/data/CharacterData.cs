@@ -15,13 +15,14 @@ using System;
 [GlobalClass]
 public partial class CharacterData : Resource
 {
-	public enum CharacterClass { Driver, Fixer, Operator, Medic, Demolisher }
+	public enum CharacterClass { Driver, Fixer, Operator, Medic, Demolisher, Shooter }
 
 	[Export] public string CharacterId { get; set; } = string.Empty;
 	[Export] public string DisplayName { get; set; } = string.Empty;
 	[Export] public CharacterClass Class { get; set; } = CharacterClass.Operator;
 
 	[Export] public string SkillName { get; set; } = string.Empty;
+	[Export(PropertyHint.MultilineText)] public string TacticalDescription { get; set; } = string.Empty;
 	[Export] public StatModifier[] Buffs { get; set; } = Array.Empty<StatModifier>();
 	[Export] public StatModifier[] Drawbacks { get; set; } = Array.Empty<StatModifier>();
 

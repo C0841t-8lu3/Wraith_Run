@@ -107,8 +107,8 @@ public partial class SurfaceLayer : Resource
 
     private static void SetBlendSlot(ShaderMaterial m, string slot, SurfaceLayer layer)
     {
-        m.SetShaderParameter(slot + "_albedo", layer.Albedo);
-        m.SetShaderParameter(slot + "_normal", layer.Normal);
+        m.SetShaderParameter(slot + "_albedo", layer.Albedo != null ? layer.Albedo : default(Variant));
+        m.SetShaderParameter(slot + "_normal", layer.Normal != null ? layer.Normal : default(Variant));
         m.SetShaderParameter(slot + "_has_normal", layer.Normal != null);
         m.SetShaderParameter(slot + "_tint", layer.Tint);
         m.SetShaderParameter(slot + "_tile", 1.0f / Mathf.Max(layer.TileMeters, 0.01f));

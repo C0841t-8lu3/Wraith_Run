@@ -211,7 +211,7 @@ public partial class GameWorld : Node3D
     {
         var match = MatchManager.Instance;
         if (match == null || !match.ModeRules.UsesVehicles || _vehicleSpawner == null) return;
-        bool buggyMode = match.GameMode == MatchManager.Mode.DuoBuggy;
+        bool buggyMode = match.GameMode == MatchManager.Mode.PureChase;
         string model = buggyMode ? GameVehicle.BuggyPath : GameVehicle.LandCruiserPath;
         string display = buggyMode ? "Raider Buggy" : "STV · Land Cruiser";
         float length = buggyMode ? 4.2f : 4.9f;

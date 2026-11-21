@@ -7,7 +7,7 @@ internal static class LoadoutLayout
 {
     /// <summary>True while a screen is being built for the tablet: the screen fills the area it is given
     /// (no full-window margins) and its fixed-width panels are narrower, so it fits the tablet's glass.</summary>
-    public static bool Compact;
+    public static bool Compact { get; set; }
 
     public static float Wide(float full, float compact) => Compact ? compact : full;
 

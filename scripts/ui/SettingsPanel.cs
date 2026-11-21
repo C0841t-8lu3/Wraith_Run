@@ -243,6 +243,8 @@ public partial class SettingsPanel : Control
         content.AddChild(display);
 
         var perf = MenuStyle.Panel("PERFORMANCE", "circle", out var perfBody);
+        perfBody.AddChild(MenuStyle.ToggleRow(null, "Show FPS & Ping Overlay", settings.ShowPerformanceOverlay,
+            v => { settings.ShowPerformanceOverlay = v; settings.Save(); rebuild(); }));
         foreach (int fps in SettingsManager.MaxFpsPresets)
         {
             int captured = fps;

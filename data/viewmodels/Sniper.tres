@@ -30,6 +30,9 @@ ClipMap = Dictionary[String, String]({
 "run": "Rig|SRifle_Walk",
 "walk": "Rig|SRifle_Walk"
 })
+ClipSpeedMultipliers = Dictionary[String, float]({
+"run": 1.6
+})
 NormalizationReferenceRig = ExtResource("2_rig")
 NormalizationReferenceArmMeshNames = Array[String](["arms"])
 CullMargin = 1.0

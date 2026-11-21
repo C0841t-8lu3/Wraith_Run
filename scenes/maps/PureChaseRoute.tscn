@@ -1,0 +1,108 @@
+[gd_scene format=3 uid="uid://dmv7chase89route"]
+
+[ext_resource type="Texture2D" uid="uid://cwdvuh6q86xtg" path="res://art/materials/tex/Road009C_Color.jpg" id="1_road"]
+[ext_resource type="Texture2D" uid="uid://c475p4s7hvwc6" path="res://art/materials/tex/Road009C_Normal.jpg" id="2_road_n"]
+[ext_resource type="Texture2D" uid="uid://21bs1lluw2vn" path="res://art/materials/tex/Concrete044B_Color.jpg" id="3_concrete"]
+[ext_resource type="Texture2D" uid="uid://bt3aub1wbmlkd" path="res://art/materials/tex/Ground106_Color.jpg" id="4_ground"]
+[ext_resource type="Texture2D" uid="uid://cv15ow7qlebo2" path="res://art/hdri/EveningSkyHDRI029B.exr" id="5_sky"]
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_1"]
+panorama = ExtResource("5_sky")
+
+[sub_resource type="Sky" id="Sky_1"]
+sky_material = SubResource("PanoramaSkyMaterial_1")
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 2
+sky = SubResource("Sky_1")
+ambient_light_source = 3
+ambient_light_color = Color(0.65, 0.68, 0.72, 1)
+ambient_light_sky_contribution = 0.85
+ambient_light_energy = 1.1
+tonemap_mode = 3
+tonemap_exposure = 1.05
+
+[sub_resource type="StandardMaterial3D" id="Mat_Road"]
+albedo_texture = ExtResource("1_road")
+normal_enabled = true
+normal_texture = ExtResource("2_road_n")
+uv1_scale = Vector3(4, 600, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_Barrier"]
+albedo_texture = ExtResource("3_concrete")
+uv1_scale = Vector3(1, 600, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Mat_Desert"]
+albedo_texture = ExtResource("4_ground")
+uv1_scale = Vector3(80, 500, 1)
+roughness = 0.95
+
+[node name="PureChaseRoute" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 20, 0)
+light_color = Color(1, 0.95, 0.88, 1)
+light_energy = 1.35
+shadow_enabled = true
+
+[node name="DesertTerrain" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.2, 1200)
+use_collision = true
+size = Vector3(350, 2, 2600)
+material = SubResource("Mat_Desert")
+
+[node name="RaceTrackHighway" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.45, 1200)
+use_collision = true
+size = Vector3(20, 1, 2400)
+material = SubResource("Mat_Road")
+
+[node name="BarrierLeft" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10.3, 0.35, 1200)
+use_collision = true
+size = Vector3(0.6, 0.8, 2400)
+material = SubResource("Mat_Barrier")
+
+[node name="BarrierRight" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.3, 0.35, 1200)
+use_collision = true
+size = Vector3(0.6, 0.8, 2400)
+material = SubResource("Mat_Barrier")
+
+[node name="BuggyStartGrid" type="Marker3D" parent="." groups=["spawn_point", "buggy_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 10)
+
+[node name="Checkpoint1" type="Area3D" parent="." groups=["race_checkpoint"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 400)
+
+[node name="Checkpoint2" type="Area3D" parent="." groups=["race_checkpoint"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 800)
+
+[node name="Checkpoint3" type="Area3D" parent="." groups=["race_checkpoint"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 1400)
+
+[node name="CheckpointFinish" type="Area3D" parent="." groups=["race_checkpoint", "finish_line"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 2350)
+
+[node name="CursedZone_FloorCollapse" type="Area3D" parent="." groups=["cursed_zone"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 500)
+
+[node name="CursedZone_PullVortex" type="Area3D" parent="." groups=["cursed_zone"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 950)
+
+[node name="CursedZone_BlindnessFog" type="Area3D" parent="." groups=["cursed_zone"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 1250)
+
+[node name="CursedZone_MirrorShift" type="Area3D" parent="." groups=["cursed_zone"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 1600)
+
+[node name="CursedZone_GhostPossession" type="Area3D" parent="." groups=["cursed_zone"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 1900)
+
+[node name="CursedZone_DeathKnell" type="Area3D" parent="." groups=["cursed_zone"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 2150)

@@ -19,7 +19,7 @@ public struct ShotInfo
 
     public bool IsMelee => WeaponClass == "Melee";
     /// <summary>Launcher-class weapon - the heavy vehicle-killer.</summary>
-    public bool IsHeavy => WeaponClass == "Launcher";
+    public bool IsHeavy => WeaponClass == "Launcher" || WeaponClass == "Anti-Vehicle";
 }
 
 /// <summary>

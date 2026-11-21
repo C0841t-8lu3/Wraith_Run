@@ -53,7 +53,7 @@ public partial class MatchResults : CanvasLayer
         if (_leaving) return;
         _secondsLeft -= (float)delta;
         if (_secondsLeft <= 0.0f) { Leave(); return; }
-        _countdown.Text = $"Returning to the main menu in {Mathf.CeilToInt(_secondsLeft)}s";
+        _countdown.Text = $"Returning to Warehouse Hub in {Mathf.CeilToInt(_secondsLeft)}s";
     }
 
     private void Leave()
@@ -103,9 +103,9 @@ public partial class MatchResults : CanvasLayer
         {
             var teams = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
             teams.AddThemeConstantOverride("separation", 24);
-            teams.AddChild(MenuStyle.Text($"ALPHA  {match.GetTeamScore(0)}", 26, MatchManager.TeamColor(0), MenuStyle.Bold));
+            teams.AddChild(MenuStyle.Text($"{MatchManager.TeamName(0)}  {match.GetTeamScore(0)}", 26, MatchManager.TeamColor(0), MenuStyle.Bold));
             teams.AddChild(MenuStyle.Text("-", 26, MenuStyle.TextMuted, MenuStyle.Bold));
-            teams.AddChild(MenuStyle.Text($"{match.GetTeamScore(1)}  BRAVO", 26, MatchManager.TeamColor(1), MenuStyle.Bold));
+            teams.AddChild(MenuStyle.Text($"{match.GetTeamScore(1)}  {MatchManager.TeamName(1)}", 26, MatchManager.TeamColor(1), MenuStyle.Bold));
             column.AddChild(teams);
         }
 

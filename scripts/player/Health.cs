@@ -17,8 +17,13 @@ public partial class Health : Node
     /// <summary>Fired on the owning peer after a hit lands (used by bots to know they were shot and by whom).</summary>
     [Signal] public delegate void DamagedEventHandler(float amount, long attackerId);
 
-    /// <summary>FR-PL-07 requires the respawn delay to sit between 3 and 5 seconds.</summary>
-    private const float RespawnDelaySeconds = 3.0f;
+    /// <summary>Master GDD Section 1: Standard modes enforce 3s delay; Convoy Assault enforces 9s delay.</summary>
+    public const float StandardRespawnDelaySeconds = 3.0f;
+    public const float ConvoyAssaultRespawnDelaySeconds = 9.0f;
+    public float EffectiveRespawnDelay =>
+        MatchManager.Instance != null && MatchManager.Instance.GameMode == MatchManager.Mode.ConvoyAssault
+            ? ConvoyAssaultRespawnDelaySeconds
+            : StandardRespawnDelaySeconds;
 
     /// <summary>
     /// Downed (struggling) state: HP at or below this fraction of max, but above zero. Applies in every
@@ -32,6 +37,27 @@ public partial class Health : Node
 
     /// <summary>Hold T this long, near a downed teammate, to revive them.</summary>
     public const float ReviveHoldSeconds = 2.5f;
+
+    /// <summary>Pulse perk: Rapid Triage (50% faster revive).</summary>
+    public float EffectiveReviveHoldSeconds =>
+        GetLoadout()?.CharacterId == "medic_pulse" ? ReviveHoldSeconds * 0.5f : ReviveHoldSeconds;
+
+    /// <summary>Anchor perk: Guardian Shell (+20 HP personal shield when standing within 5m of teammate or vehicle).</summary>
+    public const float ShieldProximityRange = 5.0f;
+    public const float ShieldRechargeDelaySeconds = 5.0f;
+    public const float MaxShield = 20.0f;
+    [Export] public float CurrentShield { get; set; } = 0.0f;
+    private float _shieldCombatTimer;
+
+    /// <summary>Stim perk: Adrenaline Boost (5-second move and reload speed buff upon revive).</summary>
+    public const float AdrenalineDurationSeconds = 5.0f;
+    public float AdrenalineTimeRemaining { get; private set; }
+    public bool IsAdrenalineActive => AdrenalineTimeRemaining > 0.0f;
+
+    public void ApplyAdrenalineBoost(float duration = 5.0f)
+    {
+        AdrenalineTimeRemaining = Mathf.Max(AdrenalineTimeRemaining, duration);
+    }
 
     /// <summary>How close (metres) and how square-on a reviver must be.</summary>
     public const float ReviveRangeMetres = 2.5f;
@@ -130,12 +156,88 @@ public partial class Health : Node
         CurrentHealth = MaxHealth;
     }
 
+    private CharacterLoadout? GetLoadout()
+    {
+        _player ??= GetParent() as CharacterBody3D;
+        _loadout ??= _player?.GetNodeOrNull<CharacterLoadout>("CharacterLoadout");
+        return _loadout;
+    }
+
+    public bool IsNearTeammateOrVehicle()
+    {
+        _player ??= GetParent() as CharacterBody3D;
+        if (_player == null) return false;
+        if (_player is PlayerMovement pm && pm.IsInVehicle) return true;
+
+        SceneTree? tree = _player.GetTree();
+        if (tree != null)
+        {
+            foreach (Node vNode in tree.GetNodesInGroup("gameplay_vehicles"))
+            {
+                if (vNode is Node3D v3d && IsInstanceValid(v3d))
+                {
+                    if (_player.GlobalPosition.DistanceTo(v3d.GlobalPosition) <= ShieldProximityRange)
+                        return true;
+                }
+            }
+        }
+
+        Node? players = _player.GetParent();
+        if (players != null)
+        {
+            MatchManager? match = MatchManager.Instance;
+            long me = PlayerIdentity.IdOf(_player);
+            foreach (Node child in players.GetChildren())
+            {
+                if (child == _player || child is not CharacterBody3D body) continue;
+                if (match != null)
+                {
+                    if (!match.IsTeamMode || !match.AreTeammates(me, PlayerIdentity.IdOf(body))) continue;
+                }
+                if (_player.GlobalPosition.DistanceTo(body.GlobalPosition) <= ShieldProximityRange)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         if (_spawnProtectionRemaining > 0.0f)
         {
             _spawnProtectionRemaining -= (float)delta;
             UpdateInvincibilityVisual();
+        }
+
+        if (AdrenalineTimeRemaining > 0.0f)
+        {
+            AdrenalineTimeRemaining = Mathf.Max(0.0f, AdrenalineTimeRemaining - (float)delta);
+        }
+
+        if (PlayerIdentity.HasAuthority(this))
+        {
+            if (_shieldCombatTimer > 0.0f)
+            {
+                _shieldCombatTimer -= (float)delta;
+            }
+
+            if (GetLoadout()?.CharacterId == "medic_anchor")
+            {
+                if (IsDead || IsDowned || !IsNearTeammateOrVehicle())
+                {
+                    CurrentShield = 0.0f;
+                }
+                else if (_shieldCombatTimer <= 0.0f && CurrentShield < MaxShield)
+                {
+                    CurrentShield = MaxShield;
+                }
+            }
+            else
+            {
+                CurrentShield = 0.0f;
+            }
         }
 
         if (!PlayerIdentity.HasAuthority(this)) return;
@@ -184,11 +286,32 @@ public partial class Health : Node
             return;
         }
 
-        CurrentHealth = Mathf.Max(0.0f, CurrentHealth - amount);
+        _shieldCombatTimer = ShieldRechargeDelaySeconds;
+
+        float damageToHealth = amount;
+        if (CurrentShield > 0.0f)
+        {
+            if (CurrentShield >= damageToHealth)
+            {
+                CurrentShield -= damageToHealth;
+                damageToHealth = 0.0f;
+            }
+            else
+            {
+                damageToHealth -= CurrentShield;
+                CurrentShield = 0.0f;
+            }
+        }
+
+        if (damageToHealth > 0.0f)
+        {
+            CurrentHealth = Mathf.Max(0.0f, CurrentHealth - damageToHealth);
+        }
         EmitSignal(SignalName.Damaged, amount, attackerId);
         if (!IsDead)
         {
             // Dropped into the downed band (alive, but on the ground until a medic arrives or the window ends).
+            if (IsDowned) CurrentShield = 0.0f;
             return;
         }
 
@@ -196,7 +319,7 @@ public partial class Health : Node
         // explosive are instant and silent; anything else makes the struggle sound).
         bool struggles = DetermineIfDeathStruggles((KillStyle)styleFlags);
         _deathPosition = _player.GlobalPosition;
-        _respawnTimer = RespawnDelaySeconds;
+        _respawnTimer = EffectiveRespawnDelay;
         AnnounceDeath(attackerId, styleFlags, basePoints, struggles);
     }
 
@@ -237,8 +360,15 @@ public partial class Health : Node
         _spawnProtectionRemaining = 0.0f;
         UpdateInvincibilityVisual();
         _deathPosition = _player.GlobalPosition;
-        _respawnTimer = RespawnDelaySeconds;
+        _respawnTimer = EffectiveRespawnDelay;
         CurrentHealth = 0.0f;
+        CurrentShield = 0.0f;
+        _shieldCombatTimer = ShieldRechargeDelaySeconds;
+        AdrenalineTimeRemaining = 0.0f;
+        if (_player is PlayerMovement pm && pm.IsInVehicle && pm.CurrentVehicle != null)
+        {
+            pm.CurrentVehicle.TryExit((int)PlayerIdentity.IdOf(_player), out _);
+        }
         AnnounceDeath(killerId, styleFlags, basePoints, struggles);
     }
 
@@ -247,7 +377,7 @@ public partial class Health : Node
     /// owning peer; the owner validates the state and the teammate relationship before restoring HP.
     /// </summary>
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    public void ReceiveRevive(long medicPeerId)
+    public void ReceiveRevive(long medicPeerId, bool isStim = false)
     {
         if (!PlayerIdentity.HasAuthority(this) || !IsDowned) return;
         if (HubState.Active) return;
@@ -263,6 +393,12 @@ public partial class Health : Node
         _downedTimer = 0.0f;
         _wasDowned = false;
         CurrentHealth = MaxHealth * ReviveHealthFraction;
+        CurrentShield = 0.0f;
+        _shieldCombatTimer = ShieldRechargeDelaySeconds;
+        if (isStim)
+        {
+            ApplyAdrenalineBoost(5.0f);
+        }
     }
 
     /// <summary>
@@ -316,9 +452,36 @@ public partial class Health : Node
             return;
         }
 
-        int totalPoints = KillStyleBonus.Evaluate(basePoints, (KillStyle)styleFlags);
+        MatchManager? match = MatchManager.Instance;
+        bool isDriver = (_player as PlayerMovement)?.IsVehicleDriver ?? false;
+        bool isShooter = (_player as PlayerMovement)?.IsInVehicle ?? false;
+
+        int totalPoints;
+        if (match?.ActiveController != null)
+        {
+            totalPoints = match.ActiveController.CalculateKillScore(killerId, PlayerIdentity.IdOf(_player), (KillStyle)styleFlags, basePoints, this);
+        }
+        else if (match?.ModeRules != null)
+        {
+            totalPoints = match.ModeRules.CalculateKillPoints(killerId, PlayerIdentity.IdOf(_player), (KillStyle)styleFlags, basePoints, isDriver, isShooter);
+        }
+        else
+        {
+            totalPoints = KillStyleBonus.Evaluate(basePoints, (KillStyle)styleFlags);
+        }
+
         SelectAssist(killerId, out long assistPeerId, out int assistPoints);
-        _killFeed.Publish(killerId, PlayerIdentity.IdOf(_player), styleFlags, basePoints,
+        if (match?.ActiveController != null)
+        {
+            assistPoints = match.ActiveController.CalculateAssistScore(assistPoints);
+        }
+        else if (match?.ModeRules != null && !match.ModeRules.UsesUniversalKillStyles)
+        {
+            assistPoints = match.ModeRules.CalculateAssistPoints(assistPoints);
+        }
+
+        int feedStyleFlags = (match?.ModeRules?.UsesUniversalKillStyles ?? true) ? styleFlags : 0;
+        _killFeed.Publish(killerId, PlayerIdentity.IdOf(_player), feedStyleFlags, basePoints,
             totalPoints, assistPeerId, assistPoints, struggles);
     }
 
@@ -348,10 +511,17 @@ public partial class Health : Node
         _player.Position = PlayerIdentity.IsBot(_player)
             ? BotNav.PickRespawnPosition(_player, _deathPosition, SpawnAreaHalfExtent, _botRng)
             : SelectHumanRespawnPoint();
+        if (_player is PlayerMovement pm && pm.IsInVehicle && pm.CurrentVehicle != null)
+        {
+            pm.LeaveVehicle(pm.CurrentVehicle, pm.GlobalPosition);
+        }
         _player.Velocity = Vector3.Zero;
         _damageContribution.Clear();
         _deathAnnounced = false;
         CurrentHealth = MaxHealth;
+        CurrentShield = 0.0f;
+        _shieldCombatTimer = 0.0f;
+        AdrenalineTimeRemaining = 0.0f;
     }
 
     private void UpdateInvincibilityVisual()
@@ -480,21 +650,27 @@ public partial class Health : Node
         Health? target = FindDownedTeammateInFront();
         if (target != null)
         {
+            float holdSeconds = EffectiveReviveHoldSeconds;
             if (Input.IsActionPressed(GameUiState.ReviveAction))
             {
                 _reviveProgress += dt;
-                if (_reviveProgress >= ReviveHoldSeconds)
+                if (_reviveProgress >= holdSeconds)
                 {
                     _reviveProgress = 0.0f;
+                    bool isStim = GetLoadout()?.CharacterId == "medic_stim";
+                    if (isStim)
+                    {
+                        ApplyAdrenalineBoost(5.0f);
+                    }
                     long victimAuthority = target._player.GetMultiplayerAuthority();
                     if (!Multiplayer.HasMultiplayerPeer() || victimAuthority == Multiplayer.GetUniqueId())
-                        target.ReceiveRevive(PlayerIdentity.IdOf(_player));
+                        target.ReceiveRevive(PlayerIdentity.IdOf(_player), isStim);
                     else
-                        target.RpcId((int)victimAuthority, Health.MethodName.ReceiveRevive, PlayerIdentity.IdOf(_player));
+                        target.RpcId((int)victimAuthority, Health.MethodName.ReceiveRevive, PlayerIdentity.IdOf(_player), isStim);
                     ShowPrompt(null);
                     return;
                 }
-                prompt = $"REVIVING  {(int)(100f * _reviveProgress / ReviveHoldSeconds)}%";
+                prompt = $"REVIVING  {(int)(100f * _reviveProgress / holdSeconds)}%";
             }
             else
             {

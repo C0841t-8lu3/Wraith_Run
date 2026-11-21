@@ -10,7 +10,86 @@
     <configurations />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="daeade38-bdd1-463f-8b70-950b70a6df8b" name="Changes" comment="" />
+    <list default="true" id="daeade38-bdd1-463f-8b70-950b70a6df8b" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/art/weapons/Melee/Karambit.glb" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/art/weapons/Melee/Karambit.glb.import" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/art/weapons/RPG/RPG.glb" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/art/weapons/RPG/RPG.glb.import" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/audio/Clips/Weapons/RPG/Impact/rpg_explosion.wav" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/audio/Clips/Weapons/RPG/Impact/rpg_explosion.wav.import" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/audio/Clips/Weapons/RPG/Reload/rpg_reload.mp3" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/audio/Clips/Weapons/RPG/Reload/rpg_reload.mp3.import" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/audio/Clips/Weapons/RPG/Shoot/rpg_shoot.wav" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/audio/Clips/Weapons/RPG/Shoot/rpg_shoot.wav.import" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/viewmodels/AK47.tres" beforeDir="false" afterPath="$PROJECT_DIR$/data/viewmodels/AK47.tres" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/viewmodels/DesertEagle.tres" beforeDir="false" afterPath="$PROJECT_DIR$/data/viewmodels/DesertEagle.tres" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/viewmodels/FN502.tres" beforeDir="false" afterPath="$PROJECT_DIR$/data/viewmodels/FN502.tres" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/viewmodels/Glock19.tres" beforeDir="false" afterPath="$PROJECT_DIR$/data/viewmodels/Glock19.tres" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/viewmodels/KrissVector.tres" beforeDir="false" afterPath="$PROJECT_DIR$/data/viewmodels/KrissVector.tres" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/viewmodels/M4.tres" beforeDir="false" afterPath="$PROJECT_DIR$/data/viewmodels/M4.tres" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/viewmodels/P90.tres" beforeDir="false" afterPath="$PROJECT_DIR$/data/viewmodels/P90.tres" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/viewmodels/Shotgun.tres" beforeDir="false" afterPath="$PROJECT_DIR$/data/viewmodels/Shotgun.tres" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/viewmodels/Sniper.tres" beforeDir="false" afterPath="$PROJECT_DIR$/data/viewmodels/Sniper.tres" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/mapkit/Core/SurfaceLayer.cs" beforeDir="false" afterPath="$PROJECT_DIR$/mapkit/Core/SurfaceLayer.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/project.godot" beforeDir="false" afterPath="$PROJECT_DIR$/project.godot" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scenes/Player.tscn" beforeDir="false" afterPath="$PROJECT_DIR$/scenes/Player.tscn" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scenes/Splash.tscn" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scenes/maps/Ashfields.tscn" beforeDir="false" afterPath="$PROJECT_DIR$/scenes/maps/Ashfields.tscn" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scenes/maps/DefaultWarehouse.tscn" beforeDir="false" afterPath="$PROJECT_DIR$/scenes/maps/DefaultWarehouse.tscn" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/autoloads/LoadingScreen.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/autoloads/LoadingScreen.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/autoloads/MatchManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/autoloads/MatchManager.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/autoloads/SettingsManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/autoloads/SettingsManager.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/bots/BotBrain.Combat.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/bots/BotBrain.Combat.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/combat/IShootable.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/combat/IShootable.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/combat/KillStyleBonus.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/combat/KillStyleBonus.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/data/CharacterData.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/data/CharacterData.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/data/OperatorInfo.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/data/OperatorInfo.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/data/WeaponData.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/data/WeaponData.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/data/WeaponRegistry.tres" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/data/WeaponRegistry.tres" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/data/WeaponSets.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/data/WeaponSets.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/modes/GameModeBase.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/modes/GameModeBase.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/network/GameWorld.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/network/GameWorld.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/network/LanMenu.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/network/LanMenu.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/network/LanSession.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/network/LanSession.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/network/PlayerNetworkSynchronizer.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/network/PlayerNetworkSynchronizer.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/player/Health.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/player/Health.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/player/PlayerAnimator.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/player/PlayerAnimator.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/player/PlayerHud.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/player/PlayerHud.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/player/PlayerMovement.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/player/PlayerMovement.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/player/PlayerScore.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/player/PlayerScore.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/player/TouchControls.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/player/TouchControls.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/player/ViewModelBase.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/player/ViewModelBase.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/player/ViewModelManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/player/ViewModelManager.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/player/ViewModelWeaponData.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/player/ViewModelWeaponData.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/player/WeaponAttachment.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/player/WeaponAttachment.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/player/WeaponSwitcher.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/player/WeaponSwitcher.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/AK47_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/AK47_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/DesertEagle_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/DesertEagle_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/FN502_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/FN502_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/Glock19_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/Glock19_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/KrissVector_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/KrissVector_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/M4_ads_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/M4_ads_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/M4_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/M4_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/P90_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/P90_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/RenderAllViewModels.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/RenderAllViewModels.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/Shotgun_ads_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/Shotgun_ads_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/Shotgun_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/Shotgun_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/Sniper_ads_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/Sniper_ads_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/tests/Sniper_render.png" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/tests/Sniper_render.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/ui/GameSession.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/ui/GameSession.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/ui/HubTablet.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/ui/HubTablet.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/ui/LoadoutScreens.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/ui/LoadoutScreens.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/ui/MatchResults.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/ui/MatchResults.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/ui/PauseMenu.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/ui/PauseMenu.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/ui/SettingsPanel.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/ui/SettingsPanel.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/ui/SplashScreen.cs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/ui/SplashScreen.cs.uid" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/vehicles/GameVehicle.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/vehicles/GameVehicle.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/world/HubController.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/world/HubController.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/world/HubProps.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/world/HubProps.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/world/HubWeaponWall.cs" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/world/HubWeaponWall.cs" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />

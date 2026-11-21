@@ -40,7 +40,7 @@ public partial class ViewModelWeaponData : Resource
 	[Export] public bool HideOriginalMagazine { get; set; } = true;
 	[Export] public Godot.Collections.Dictionary<string, string> ClipMap { get; set; } = new();
 	[Export] public Godot.Collections.Dictionary<string, float> ClipSpeedMultipliers { get; set; } = new();
-	[Export] public float IdlePoseTime { get; set; }
+	[Export] public float IdlePoseTime { get; set; } = -1.0f;
 	[Export] public PackedScene? NormalizationReferenceRig { get; set; }
 	[Export] public Godot.Collections.Array<string> NormalizationReferenceArmMeshNames { get; set; } = new();
 	[Export] public float CullMargin { get; set; } = 0.5f;

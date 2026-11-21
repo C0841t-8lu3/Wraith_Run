@@ -123,7 +123,7 @@ public partial class BotBrain
 	private bool NeedsReloadSoon()
 	{
 		int mag = _weapon.MagazineSize;
-		if (mag <= 0 || _weapon.CurrentReserve <= 0) return false;
+		if (mag <= 0 || (_weapon.CurrentReserve <= 0 && !_weapon.IsCurrentWeaponSidearm)) return false;
 		return (float)_weapon.CurrentAmmo / mag < 0.35f;
 	}
 
@@ -137,14 +137,14 @@ public partial class BotBrain
 		if (mag <= 0) return; // melee / unknown
 
 		// Nothing left at all: in this game equipping another weapon refills it, so swap.
-		if (ammo <= 0 && reserve <= 0 && _now >= _swapCooldown)
+		if (ammo <= 0 && (reserve <= 0 && !_weapon.IsCurrentWeaponSidearm) && _now >= _swapCooldown)
 		{
 			SwitchWeapon(idx == _primary ? _secondary : _primary);
 			return;
 		}
 
 		// Pros pull the sidearm rather than reload with someone on top of them.
-		if (Level == BotDifficulty.Advanced && ammo <= 0 && reserve > 0 && enemyVisible && idx == _primary
+		if (Level == BotDifficulty.Advanced && ammo <= 0 && (reserve > 0 || _weapon.IsCurrentWeaponSidearm) && enemyVisible && idx == _primary
 			&& _now >= _swapCooldown && _target != null && Flat(_target.LastPos, _body.GlobalPosition) < 14.0f)
 		{
 			SwitchWeapon(_secondary);

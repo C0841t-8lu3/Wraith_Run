@@ -1,59 +1,64 @@
 using Godot;
+using System;
+using System.Collections.Generic;
 
 /// <summary>
-/// Autoload (see project.godot). A full-screen overlay shown while LanMenu hands off into
-/// GameWorld - covers the one-frame scene-swap hitch and gives the "Preparing the battlefield"
-/// beat the menu mockups show. Two call sites only, both one line each:
-///   - LanMenu.LeaveForGame() calls Show() right before the deferred scene change.
-///   - GameWorld._Ready() calls Hide() once players have spawned.
-/// Self-contained and built entirely in code (background image, bar, label, tips) rather than a
-/// separate .tscn, so there is nothing else to wire up - drop this file in scripts/autoloads/,
-/// add the one project.godot autoload line, and it works.
+/// Autoloaded tactical loading screen (scenes/ui/LoadingScreen.tscn / scripts/autoloads/LoadingScreen.cs).
+/// Provides an asynchronous scene loader using ResourceLoader.LoadThreadedRequest and
+/// ResourceLoader.LoadThreadedGetStatus, a smooth glowing tactical progress bar,
+/// and a rotating tactical hint carousel with keybinds, game mode rules, and operator tips.
 /// </summary>
 public partial class LoadingScreen : CanvasLayer
 {
 	public static LoadingScreen Instance { get; private set; } = null!;
 
-	/// <summary>Shown for every menu->match and match->menu transition. One is picked at random
-	/// each time Show() is called (never the same one twice in a row) so the loading screen
-	/// doesn't go stale over a long play session.</summary>
-	private static readonly string[] BackgroundImagePaths =
-	{
-		"res://art/ui/loading/loading_1.png",
-		"res://art/ui/loading/loading_2.png",
-		"res://art/ui/loading/loading_3.png",
-		"res://art/ui/loading/loading_4.png",
-		"res://art/ui/loading/loading_5.png",
-	};
-
-	/// <summary>Never disappears faster than this, even if GameWorld._Ready() fires the same
-	/// frame Show() was called - a loading screen that flashes for one frame reads as a glitch,
-	/// not as "the game loaded fast".</summary>
-	private const float MinDisplaySeconds = 1.6f;
-
+	private const float MinDisplaySeconds = 1.2f;
 	private const float FadeSeconds = 0.35f;
-	private const float TipRotateSeconds = 2.6f;
+	private const float TipRotateSeconds = 3.0f;
 
-	private static readonly string[] Tips =
+	private static readonly string[] TacticalHints =
 	{
-		"Tip: Headshots and clean one-shot kills end it fast - anything else, they go down fighting.",
-		"Tip: A shot heard from far away arrives a beat late - real distance, real delay.",
-		"Tip: Work together. One drives, one shoots.",
-		"Tip: Melee never goes quietly, no matter how hard you hit.",
+		// Controls & Keybinds
+		"[CONTROLS]  W / A / S / D  to Move  ·  SHIFT  to Sprint  ·  C  to Crouch  ·  SPACE  to Jump",
+		"[COMBAT]  RMB  to Aim Down Sights (ADS)  ·  LMB  to Fire  ·  R  to Reload  ·  1 / 2 / 3  to Swap Weapons",
+		"[INTERFACE]  TAB / ESC  to pull out Tactical Tablet  ·  M  for Match Overview  ·  ENTER  for Quick Chat",
+
+		// Game Modes
+		"[TEAM DEATHMATCH]  Albert Team vs. Einstein Team · Style bonuses (+150 Headshot, +125 Hip-Fire, +175 360 No-Scope)",
+		"[DEATHMATCH]  Classic Free-For-All arena · Zero storms or gimmicks · Operators fight strictly for personal score",
+		"[CONVOY ASSAULT]  Up to 9v9 STV extraction corridor · 7 rounds (first to 4 wins) · Teams swap sides every round",
+		"[PURE CHASE]  2v2 Duo Buggy combat race · Watch for 8-second visual omen warnings before Cursed Land Events strike",
+
+		// Operator Classes
+		"[DRIVERS]  Apex, Shift, Ghost, Tread excel at high-speed maneuvers, collision resilience, and tire durability",
+		"[SHOOTERS]  Viper, Rage, Spark, Flash maximize weapon swap speed, magazine capacity, and vehicular firing stability",
+		"[MEDICS]  Pulse, Patch, Stim, Anchor deliver rapid revivals, on-foot field vehicle repairs, and guardian shields",
+
+		// Tactical Tips
+		"[TACTICAL]  Aim Down Sights eliminates weapon sway for pinpoint accuracy across medium and long ranges",
+		"[TACTICAL]  The Bazooka destroys enemy vehicles in a single direct hit; sidearms provide rapid backup in close quarters"
 	};
 
-	private ColorRect _fade = null!;
-	private ProgressBar _bar = null!;
-	private Label _tipLabel = null!;
-	private Tween? _barTween;
+	private Control _root = null!;
+	private ProgressBar _progressBar = null!;
+	private Label _progressLabel = null!;
+	private Label _statusLabel = null!;
+	private Label _hintLabel = null!;
+	private Timer _hintTimer = null!;
 	private Tween? _fadeTween;
-	private Timer _tipTimer = null!;
-	private TextureRect _background = null!;
+	private Tween? _hintTween;
+
 	private ulong _shownAtMsec;
-	private bool _visible;
-	private int _tipIndex = -1;
-	private int _bgIndex = -1;
+	private bool _isOverlayVisible;
+	private int _currentHintIndex = -1;
 	private readonly RandomNumberGenerator _rng = new();
+
+	// Async Loading State
+	private string? _pendingScenePath;
+	private Action? _onLoadComplete;
+	private bool _isLoadingAsync;
+	private float _displayProgress;
+	private float _targetProgress;
 
 	public override void _Ready()
 	{
@@ -61,36 +66,112 @@ public partial class LoadingScreen : CanvasLayer
 		Layer = 100;
 		ProcessMode = ProcessModeEnum.Always;
 		_rng.Randomize();
-		Build();
+		BuildTacticalLayout();
 		SetOverlayVisible(false, immediate: true);
+		SetProcess(false);
 	}
 
-	/// <summary>Shows the overlay and starts the fill-and-tips animation. Safe to call more than
-	/// once in a row (a second call just resets the timer).</summary>
+	public override void _Process(double delta)
+	{
+		float dt = (float)delta;
+
+		if (_isLoadingAsync && !string.IsNullOrEmpty(_pendingScenePath))
+		{
+			var progressArray = new Godot.Collections.Array();
+			ResourceLoader.ThreadLoadStatus status = ResourceLoader.LoadThreadedGetStatus(_pendingScenePath, progressArray);
+
+			if (progressArray.Count > 0)
+			{
+				float loadedFraction = (float)progressArray[0];
+				_targetProgress = Mathf.Max(_targetProgress, loadedFraction * 100.0f);
+			}
+
+			// Smooth progress bar advancement
+			_displayProgress = Mathf.MoveToward(_displayProgress, _targetProgress, dt * 120.0f);
+			UpdateProgressBar(_displayProgress);
+
+			if (status == ResourceLoader.ThreadLoadStatus.Loaded && _displayProgress >= 99.0f)
+			{
+				_isLoadingAsync = false;
+				SetProcess(false);
+				FinalizeAsyncLoad();
+			}
+			else if (status == ResourceLoader.ThreadLoadStatus.Failed || status == ResourceLoader.ThreadLoadStatus.InvalidResource)
+			{
+				_isLoadingAsync = false;
+				SetProcess(false);
+				GD.PushError($"LoadingScreen: Failed to load scene asynchronously '{_pendingScenePath}'. Status: {status}");
+				FinishHide();
+			}
+		}
+		else if (_displayProgress < _targetProgress)
+		{
+			_displayProgress = Mathf.MoveToward(_displayProgress, _targetProgress, dt * 80.0f);
+			UpdateProgressBar(_displayProgress);
+		}
+	}
+
+	/// <summary>
+	/// Initiates asynchronous threaded scene loading with animated tactical loading screen.
+	/// </summary>
+	public void LoadSceneAsync(string scenePath, Action? onLoaded = null)
+	{
+		_pendingScenePath = scenePath;
+		_onLoadComplete = onLoaded;
+		_isLoadingAsync = true;
+		_displayProgress = 0.0f;
+		_targetProgress = 5.0f;
+
+		ShowLoadingInternal("PREPARING BATTLEFIELD...", "LOADING ASSETS");
+
+		Error err = ResourceLoader.LoadThreadedRequest(scenePath, "", useSubThreads: true);
+		if (err != Error.Ok)
+		{
+			GD.PushError($"LoadingScreen: LoadThreadedRequest failed for '{scenePath}', error={err}");
+			_isLoadingAsync = false;
+			GetTree().ChangeSceneToFile(scenePath);
+			FinishHide();
+			return;
+		}
+
+		SetProcess(true);
+	}
+
+	private void FinalizeAsyncLoad()
+	{
+		if (string.IsNullOrEmpty(_pendingScenePath)) return;
+
+		var packedScene = ResourceLoader.LoadThreadedGet(_pendingScenePath) as PackedScene;
+		if (packedScene != null)
+		{
+			GetTree().ChangeSceneToPacked(packedScene);
+			_onLoadComplete?.Invoke();
+		}
+		else
+		{
+			GetTree().ChangeSceneToFile(_pendingScenePath);
+			_onLoadComplete?.Invoke();
+		}
+
+		_pendingScenePath = null;
+		_onLoadComplete = null;
+		Hide();
+	}
+
+	/// <summary>Synchronous/manual show trigger for backward compatibility.</summary>
 	public new void Show()
 	{
-		_shownAtMsec = Time.GetTicksMsec();
-		_bar.Value = 0.0;
-		_tipIndex = -1;
-		RollTip();
-		RollBackground();
-		_tipTimer.Start(TipRotateSeconds);
-		SetOverlayVisible(true, immediate: true);
-
-		_barTween?.Kill();
-		_barTween = CreateTween();
-		// Eases toward ~92%, not 100 - the last stretch is left for Hide() to complete, so the
-		// bar visually "finishes" right when the match is actually ready rather than sitting
-		// full while the player waits on nothing.
-		_barTween.TweenProperty(_bar, "value", 92.0, MinDisplaySeconds * 0.85)
-			.SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
+		_isLoadingAsync = false;
+		_displayProgress = 0.0f;
+		_targetProgress = 92.0f;
+		ShowLoadingInternal("DEPLOYING OPERATORS...", "INITIALIZING SQUAD");
+		SetProcess(true);
 	}
 
-	/// <summary>Completes the bar and fades the overlay out, but never before MinDisplaySeconds
-	/// has elapsed since Show() - see the class doc.</summary>
+	/// <summary>Hides the overlay with minimum display guarantee and smooth fade.</summary>
 	public new void Hide()
 	{
-		if (!_visible) return;
+		if (!_isOverlayVisible) return;
 		float elapsed = (Time.GetTicksMsec() - _shownAtMsec) / 1000.0f;
 		float remaining = Mathf.Max(0.0f, MinDisplaySeconds - elapsed);
 		if (remaining <= 0.0f)
@@ -102,110 +183,228 @@ public partial class LoadingScreen : CanvasLayer
 		timer.Timeout += FinishHide;
 	}
 
+	private void ShowLoadingInternal(string statusText, string subStatus)
+	{
+		_shownAtMsec = Time.GetTicksMsec();
+		_statusLabel.Text = statusText;
+		_currentHintIndex = -1;
+		RollTacticalHint(immediate: true);
+		_hintTimer.Start(TipRotateSeconds);
+		SetOverlayVisible(true, immediate: true);
+		UpdateProgressBar(_displayProgress);
+	}
+
 	private void FinishHide()
 	{
-		if (!_visible) return;
-		_tipTimer.Stop();
-		_barTween?.Kill();
-		_barTween = CreateTween();
-		_barTween.TweenProperty(_bar, "value", 100.0, 0.2)
-			.SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
+		if (!_isOverlayVisible) return;
+		_hintTimer.Stop();
+		_targetProgress = 100.0f;
+		_displayProgress = 100.0f;
+		UpdateProgressBar(100.0f);
 
 		_fadeTween?.Kill();
 		_fadeTween = CreateTween();
-		_fadeTween.TweenProperty(_fade.GetParent<CanvasItem>(), "modulate:a", 0.0, FadeSeconds)
-			.SetDelay(0.15f);
-		_fadeTween.TweenCallback(Callable.From(() => SetOverlayVisible(false, immediate: true)));
+		_fadeTween.TweenProperty(_root, "modulate:a", 0.0, FadeSeconds).SetTrans(Tween.TransitionType.Sine);
+		_fadeTween.TweenCallback(Callable.From(() =>
+		{
+			SetOverlayVisible(false, immediate: true);
+			SetProcess(false);
+		}));
 	}
 
 	private void SetOverlayVisible(bool visible, bool immediate)
 	{
-		_visible = visible;
+		_isOverlayVisible = visible;
 		Visible = visible;
-		if (immediate && visible) _fade.GetParent<CanvasItem>().Modulate = new Color(1, 1, 1, 1);
+		if (immediate && visible) _root.Modulate = new Color(1, 1, 1, 1);
 	}
 
-	private void RollTip()
+	private void UpdateProgressBar(float value)
 	{
-		if (Tips.Length == 0) return;
-		int next = Tips.Length == 1 ? 0 : _rng.RandiRange(0, Tips.Length - 1);
-		if (next == _tipIndex) next = (next + 1) % Tips.Length;
-		_tipIndex = next;
-		_tipLabel.Text = Tips[_tipIndex];
+		if (_progressBar != null) _progressBar.Value = Mathf.Clamp(value, 0.0f, 100.0f);
+		if (_progressLabel != null) _progressLabel.Text = $"{Mathf.RoundToInt(value)}%";
 	}
 
-	private void RollBackground()
+	private void RollTacticalHint(bool immediate = false)
 	{
-		if (BackgroundImagePaths.Length == 0) return;
-		int next = BackgroundImagePaths.Length == 1 ? 0 : _rng.RandiRange(0, BackgroundImagePaths.Length - 1);
-		if (next == _bgIndex) next = (next + 1) % BackgroundImagePaths.Length;
-		_bgIndex = next;
-		_background.Texture = GD.Load<Texture2D>(BackgroundImagePaths[_bgIndex]);
-	}
+		if (TacticalHints.Length == 0) return;
+		int next = _rng.RandiRange(0, TacticalHints.Length - 1);
+		if (next == _currentHintIndex) next = (next + 1) % TacticalHints.Length;
+		_currentHintIndex = next;
 
-	// -------------------------------------------------------------------------------------------
-	// Layout - built once in code, no .tscn to keep in sync.
-	// -------------------------------------------------------------------------------------------
-	private void Build()
-	{
-		var root = new Control { Name = "Root" };
-		root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-		root.MouseFilter = Control.MouseFilterEnum.Stop;
-		AddChild(root);
-
-		_background = new TextureRect
+		if (immediate)
 		{
-			Name = "Background",
-			StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
-			ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+			_hintLabel.Text = TacticalHints[_currentHintIndex];
+			_hintLabel.Modulate = new Color(1, 1, 1, 1);
+			return;
+		}
+
+		_hintTween?.Kill();
+		_hintTween = CreateTween();
+		_hintTween.TweenProperty(_hintLabel, "modulate:a", 0.0, 0.2);
+		_hintTween.TweenCallback(Callable.From(() =>
+		{
+			_hintLabel.Text = TacticalHints[_currentHintIndex];
+		}));
+		_hintTween.TweenProperty(_hintLabel, "modulate:a", 1.0, 0.25);
+	}
+
+	private void BuildTacticalLayout()
+	{
+		_root = new Control { Name = "TacticalLoadingRoot" };
+		_root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_root.MouseFilter = Control.MouseFilterEnum.Stop;
+		AddChild(_root);
+
+		// Tactical dark background
+		var darkBg = new ColorRect
+		{
+			Name = "DarkTacticalBg",
+			Color = new Color(0.045f, 0.052f, 0.06f, 1.0f)
 		};
-		_background.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-		_background.ClipContents = true;
-		root.AddChild(_background);
+		darkBg.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_root.AddChild(darkBg);
 
-		// Darken the lower third so the bar/label/tip stay legible over any background.
-		var scrim = new ColorRect { Name = "Scrim", Color = new Color(0, 0, 0, 0.55f) };
-		scrim.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
-		scrim.OffsetTop = -170;
-		root.AddChild(scrim);
+		// Subtle tactical vignette/scrim overlay
+		var vignette = new ColorRect
+		{
+			Name = "TacticalVignette",
+			Color = new Color(0.015f, 0.02f, 0.025f, 0.6f)
+		};
+		vignette.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_root.AddChild(vignette);
 
-		var column = new VBoxContainer { Name = "Column", Alignment = BoxContainer.AlignmentMode.Center };
-		column.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
-		column.OffsetTop = -140;
-		column.OffsetBottom = -36;
-		column.OffsetLeft = 48;
-		column.OffsetRight = -48;
-		column.AddThemeConstantOverride("separation", 10);
-		root.AddChild(column);
+		// Tactical center brand element
+		var centerBrand = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+		centerBrand.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		centerBrand.Position = new Vector2(0, -60);
+		_root.AddChild(centerBrand);
 
-		var loadingLabel = new Label { Name = "LoadingLabel", Text = "LOADING..." };
-		loadingLabel.AddThemeFontSizeOverride("font_size", 22);
-		loadingLabel.AddThemeColorOverride("font_color", new Color(0.92f, 0.92f, 0.92f));
-		loadingLabel.HorizontalAlignment = HorizontalAlignment.Left;
-		column.AddChild(loadingLabel);
+		var brandBox = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+		brandBox.AddThemeConstantOverride("separation", 6);
+		centerBrand.AddChild(brandBox);
 
-		_bar = new ProgressBar { Name = "Bar", MinValue = 0, MaxValue = 100, ShowPercentage = false };
-		_bar.CustomMinimumSize = new Vector2(0, 14);
-		var barBg = new StyleBoxFlat { BgColor = new Color(1, 1, 1, 0.12f), CornerRadiusTopLeft = 2,
-			CornerRadiusTopRight = 2, CornerRadiusBottomLeft = 2, CornerRadiusBottomRight = 2 };
-		var barFill = new StyleBoxFlat { BgColor = new Color(0.82f, 0.09f, 0.11f), CornerRadiusTopLeft = 2,
-			CornerRadiusTopRight = 2, CornerRadiusBottomLeft = 2, CornerRadiusBottomRight = 2 };
-		_bar.AddThemeStyleboxOverride("background", barBg);
-		_bar.AddThemeStyleboxOverride("fill", barFill);
-		column.AddChild(_bar);
+		var titleLabel = new Label
+		{
+			Text = "WRAITH RUN",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		titleLabel.AddThemeFontOverride("font", MenuStyle.Bold);
+		titleLabel.AddThemeFontSizeOverride("font_size", 42);
+		titleLabel.AddThemeColorOverride("font_color", new Color(0.96f, 0.97f, 1.0f));
+		titleLabel.AddThemeColorOverride("font_outline_color", new Color(0.0f, 0.75f, 0.95f, 0.7f));
+		titleLabel.AddThemeConstantOverride("outline_size", 8);
+		brandBox.AddChild(titleLabel);
 
-		_tipLabel = new Label { Name = "TipLabel" };
-		_tipLabel.AddThemeFontSizeOverride("font_size", 14);
-		_tipLabel.AddThemeColorOverride("font_color", new Color(0.78f, 0.78f, 0.78f));
-		_tipLabel.HorizontalAlignment = HorizontalAlignment.Left;
-		column.AddChild(_tipLabel);
+		var subTitleLabel = new Label
+		{
+			Text = "TACTICAL EXTRACTION COMBAT",
+			HorizontalAlignment = HorizontalAlignment.Center
+		};
+		subTitleLabel.AddThemeFontOverride("font", MenuStyle.SemiBold);
+		subTitleLabel.AddThemeFontSizeOverride("font_size", 14);
+		subTitleLabel.AddThemeColorOverride("font_color", new Color(0.45f, 0.75f, 0.95f, 0.9f));
+		brandBox.AddChild(subTitleLabel);
 
-		_tipTimer = new Timer { Name = "TipTimer", OneShot = false, WaitTime = TipRotateSeconds };
-		_tipTimer.Timeout += RollTip;
-		AddChild(_tipTimer);
+		// Bottom Tactical HUD Card for Progress & Hints
+		var bottomContainer = new VBoxContainer
+		{
+			Name = "BottomTacticalCard",
+			Alignment = BoxContainer.AlignmentMode.Center
+		};
+		bottomContainer.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
+		bottomContainer.OffsetTop = -180;
+		bottomContainer.OffsetBottom = -32;
+		bottomContainer.OffsetLeft = 64;
+		bottomContainer.OffsetRight = -64;
+		bottomContainer.AddThemeConstantOverride("separation", 10);
+		_root.AddChild(bottomContainer);
 
-		// Modulate on the root Control is what FinishHide fades - keep a reference the tween
-		// methods above can reach without another field.
-		_fade = scrim;
+		// Status Row: "PREPARING BATTLEFIELD..." + "92%"
+		var statusRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+		bottomContainer.AddChild(statusRow);
+
+		_statusLabel = new Label
+		{
+			Name = "StatusLabel",
+			Text = "PREPARING BATTLEFIELD...",
+			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+		};
+		_statusLabel.AddThemeFontOverride("font", MenuStyle.Bold);
+		_statusLabel.AddThemeFontSizeOverride("font_size", 16);
+		_statusLabel.AddThemeColorOverride("font_color", new Color(0.88f, 0.92f, 0.96f));
+		statusRow.AddChild(_statusLabel);
+
+		_progressLabel = new Label
+		{
+			Name = "ProgressLabel",
+			Text = "0%",
+			HorizontalAlignment = HorizontalAlignment.Right
+		};
+		_progressLabel.AddThemeFontOverride("font", MenuStyle.Bold);
+		_progressLabel.AddThemeFontSizeOverride("font_size", 16);
+		_progressLabel.AddThemeColorOverride("font_color", new Color(0.0f, 0.85f, 1.0f));
+		statusRow.AddChild(_progressLabel);
+
+		// Glowing Tactical Progress Bar
+		_progressBar = new ProgressBar
+		{
+			Name = "ProgressBar",
+			MinValue = 0,
+			MaxValue = 100,
+			ShowPercentage = false,
+			CustomMinimumSize = new Vector2(0, 10)
+		};
+		var barBg = new StyleBoxFlat
+		{
+			BgColor = new Color(0.08f, 0.11f, 0.14f, 0.9f),
+			BorderColor = new Color(0.2f, 0.28f, 0.35f, 0.6f),
+			BorderWidthLeft = 1, BorderWidthRight = 1, BorderWidthTop = 1, BorderWidthBottom = 1,
+			CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3, CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3
+		};
+		var barFill = new StyleBoxFlat
+		{
+			BgColor = new Color(0.0f, 0.78f, 1.0f, 1.0f),
+			ShadowColor = new Color(0.0f, 0.85f, 1.0f, 0.55f),
+			ShadowSize = 6,
+			CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3, CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3
+		};
+		_progressBar.AddThemeStyleboxOverride("background", barBg);
+		_progressBar.AddThemeStyleboxOverride("fill", barFill);
+		bottomContainer.AddChild(_progressBar);
+
+		// Tactical Rotating Hint Carousel
+		var hintPanel = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+		var hintStyle = new StyleBoxFlat
+		{
+			BgColor = new Color(0.06f, 0.08f, 0.10f, 0.85f),
+			BorderColor = new Color(0.18f, 0.24f, 0.30f, 0.5f),
+			BorderWidthTop = 1, BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1,
+			CornerRadiusBottomLeft = 4, CornerRadiusBottomRight = 4, CornerRadiusTopLeft = 4, CornerRadiusTopRight = 4
+		};
+		hintPanel.AddThemeStyleboxOverride("panel", hintStyle);
+		bottomContainer.AddChild(hintPanel);
+
+		var hintMargin = new MarginContainer();
+		hintMargin.AddThemeConstantOverride("margin_left", 14);
+		hintMargin.AddThemeConstantOverride("margin_right", 14);
+		hintMargin.AddThemeConstantOverride("margin_top", 8);
+		hintMargin.AddThemeConstantOverride("margin_bottom", 8);
+		hintPanel.AddChild(hintMargin);
+
+		_hintLabel = new Label
+		{
+			Name = "HintLabel",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		_hintLabel.AddThemeFontOverride("font", MenuStyle.Medium);
+		_hintLabel.AddThemeFontSizeOverride("font_size", 13);
+		_hintLabel.AddThemeColorOverride("font_color", new Color(0.78f, 0.84f, 0.90f));
+		hintMargin.AddChild(_hintLabel);
+
+		// Hint rotation timer
+		_hintTimer = new Timer { Name = "HintTimer", OneShot = false, WaitTime = TipRotateSeconds };
+		_hintTimer.Timeout += () => RollTacticalHint(immediate: false);
+		AddChild(_hintTimer);
 	}
 }

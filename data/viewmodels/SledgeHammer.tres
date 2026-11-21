@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="ViewModelWeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/player/ViewModelWeaponData.cs" id="1_script"]
+[ext_resource type="PackedScene" path="res://art/animations/player/combat/sledge hammer/source/FPS_Anims.glb" id="2_rig"]
+
+[resource]
+script = ExtResource("1_script")
+WeaponName = "Sledge Hammer"
+RigScene = ExtResource("2_rig")
+UseRigCameraTransform = true
+CameraBoneName = ""
+ViewPosition = Vector3(0.04, -0.14, 0.04)
+ViewRotationDegrees = Vector3(12, -8, 2)
+ViewScale = Vector3(0.95, 0.95, 0.95)
+ArmMeshNames = ["arms"]
+OriginalWeaponMeshNames = ["SledgeHammer_SledgeHammer_0"]
+OriginalMagazineMeshNames = []
+HideOriginalWeapon = false
+HideOriginalMagazine = true
+ClipMap = Dictionary[String, String]({
+"attack": "attack",
+"draw": "drawn",
+"drawn": "drawn",
+"fire": "attack",
+"idle": "idle",
+"put": "put",
+"run": "run",
+"walk": "walk"
+})
+CullMargin = 1.0
+MuzzleFlashEnabled = false

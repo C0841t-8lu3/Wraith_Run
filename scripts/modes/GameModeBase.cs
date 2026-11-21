@@ -12,118 +12,133 @@ public abstract partial class GameModeBase : RefCounted
     public virtual bool UsesVehicles => true;
     public virtual bool UsesCursedEvents => false;
     public virtual bool HasTimedResolution => false;
+    public virtual bool UsesUniversalKillStyles => false;
     public virtual int RecommendedTeamSize => 2;
     public virtual int MinimumPlayers => 2;
     public virtual int MaximumPlayers => 16;
 
+    public virtual BaseModeController CreateModeController() => new TeamDeathmatchController();
+
+    public virtual int CalculateKillPoints(long killerPeerId, long victimPeerId, KillStyle styles, int basePoints, bool isDriver, bool isShooter)
+    {
+        if (UsesUniversalKillStyles)
+        {
+            return KillStyleBonus.Evaluate(basePoints > 0 ? basePoints : BaseKillPoints, styles);
+        }
+        return BaseKillPoints;
+    }
+
+    public virtual int CalculateAssistPoints(int baseAssist) => UsesUniversalKillStyles ? baseAssist : 0;
+
     public static GameModeBase For(MatchManager.Mode mode) => mode switch
     {
-        MatchManager.Mode.Default => new DefaultMode(),
         MatchManager.Mode.TeamDeathmatch => new TeamDeathmatchMode(),
-        MatchManager.Mode.PureChase => new PureChaseMode(),
-        MatchManager.Mode.StormRespawn => new StormRespawnMode(),
-        MatchManager.Mode.ClanChase => new ClanChaseMode(),
-        MatchManager.Mode.CursedDeathmatch => new CursedDeathmatchMode(),
+        MatchManager.Mode.Deathmatch => new DeathmatchMode(),
         MatchManager.Mode.ConvoyAssault => new ConvoyAssaultMode(),
-        MatchManager.Mode.DuoBuggy => new DuoBuggyMode(),
-        _ => new DefaultMode(),
+        MatchManager.Mode.PureChase => new PureChaseMode(),
+        _ => new TeamDeathmatchMode(),
     };
 }
 
-public partial class DefaultMode : GameModeBase
+/// <summary>
+/// Mode 2: Deathmatch (Free-For-All) — Pure arena combat, no storms or cursed zones (Master GDD Section 2.2).
+/// Universal Kill-Style Bonuses apply.
+/// </summary>
+public partial class DeathmatchMode : GameModeBase
 {
-    public override MatchManager.Mode Id => MatchManager.Mode.Default;
-    public override string DisplayName => "Default";
-    public override string LobbyDescription => "Two-player crews fight for points across the wasteland. Cursed land events and the garage are active. The host ends the open match when ready; the team with the most points wins.";
-    public override string PlayerFormat => "Two-player crews · driver + shooter";
-    public override int BaseKillPoints => 100;
-    public override bool UsesTeams => true;
-    public override bool UsesCursedEvents => true;
+    public override MatchManager.Mode Id => MatchManager.Mode.Deathmatch;
+    public override string DisplayName => "Deathmatch";
+    public override string LobbyDescription => "Pure, no-gimmick free-for-all combat on default arena settings. There are no storms, cursed zones, or environmental distractions—every operator fights strictly for themselves until the match timer or kill cap is reached.";
+    public override string PlayerFormat => "Free for all · 4–12 players";
+    public override int BaseKillPoints => KillStyleBonus.DefaultBaseKillPoints;
+    public override bool UsesTeams => false;
+    public override bool UsesVehicles => false;
+    public override bool UsesCursedEvents => false;
+    public override bool HasTimedResolution => true;
+    public override bool UsesUniversalKillStyles => true;
+    public override int MinimumPlayers => 2;
+    public override int MaximumPlayers => 12;
+    public override int RecommendedTeamSize => 1;
+
+    public override BaseModeController CreateModeController() => new DeathmatchController();
 }
 
+/// <summary>Backward-compatible alias for DefaultMode.</summary>
+public partial class DefaultMode : DeathmatchMode
+{
+}
+
+/// <summary>
+/// Mode 4: Pure Chase (2v2 Duo Buggy Combat Race) — 4–5 min checkpoint route with active Cursed Land Events and 8s omen warnings (Master GDD Section 2.4 & 5.2).
+/// Dedicated objective numerics for damaging rival buggy and eliminating rival crew.
+/// </summary>
 public partial class PureChaseMode : GameModeBase
 {
     public override MatchManager.Mode Id => MatchManager.Mode.PureChase;
     public override string DisplayName => "Pure Chase";
-    public override string LobbyDescription => "Each team hunts an assigned rival team. There are no cursed events or garage. Be the first team to destroy five rival vehicles; reaching the checkpoint ahead of your target earns bonus points.";
-    public override string PlayerFormat => "Two-player crews · assigned target teams";
-    public override int BaseKillPoints => 100;
+    public override string LobbyDescription => "2v2 Duo Buggy combat race across a 4–5 minute checkpoint route. Active Cursed Land Events with 8-second visual omen warnings. Dedicated objective numerics for damaging rival buggy and eliminating rival crew.";
+    public override string PlayerFormat => "2 teams · 2 players each · exactly 4 total";
+    public override int BaseKillPoints => PureChaseController.PointsKillRivalShooter;
     public override bool UsesTeams => true;
+    public override bool UsesVehicles => true;
+    public override bool UsesCursedEvents => true;
+    public override bool HasTimedResolution => true;
+    public override bool UsesUniversalKillStyles => false;
+    public override int RecommendedTeamSize => 2;
+    public override int MinimumPlayers => 4;
+    public override int MaximumPlayers => 4;
+
+    public override BaseModeController CreateModeController() => new PureChaseController();
+
+    public override int CalculateKillPoints(long killerPeerId, long victimPeerId, KillStyle styles, int basePoints, bool isDriver, bool isShooter) =>
+        isDriver ? PureChaseController.PointsKillRivalDriver : PureChaseController.PointsKillRivalShooter;
 }
 
-/// <summary>Plain Alpha vs Bravo on foot: the mode the hub's two warehouses were designed for. Team
-/// scoring and the time limit already live in MatchManager (they check GameMode == TeamDeathmatch);
-/// this class only gives the mode its own name and rules so it can be picked in the lobby.</summary>
+/// <summary>
+/// Mode 1: Team Deathmatch (Albert vs. Einstein) — Host-assigned rosters, classic high-tempo arena combat (Master GDD Section 2.1 & 5.1).
+/// Universal Kill-Style Bonuses apply.
+/// </summary>
 public partial class TeamDeathmatchMode : GameModeBase
 {
     public override MatchManager.Mode Id => MatchManager.Mode.TeamDeathmatch;
     public override string DisplayName => "Team Deathmatch";
-    public override string LobbyDescription => "Alpha against Bravo on foot. Each team preps in its own warehouse; when the host starts, both squads drop into the map. The team with the most kills when time runs out wins.";
-    public override string PlayerFormat => "2 teams · Alpha vs Bravo";
-    public override int BaseKillPoints => 100;
+    public override string LobbyDescription => "Albert against Einstein on foot. Host-assigned rosters, classic high-tempo arena combat. Universal Kill-Style Bonuses apply. The team with the most points when time runs out wins.";
+    public override string PlayerFormat => "2 teams · Albert vs Einstein";
+    public override int BaseKillPoints => KillStyleBonus.DefaultBaseKillPoints;
     public override bool UsesTeams => true;
     public override bool UsesVehicles => false;
+    public override bool UsesCursedEvents => false;
     public override bool HasTimedResolution => true;
+    public override bool UsesUniversalKillStyles => true;
     public override int RecommendedTeamSize => 4;
+    public override int MinimumPlayers => 2;
+    public override int MaximumPlayers => 16;
+
+    public override BaseModeController CreateModeController() => new TeamDeathmatchController();
 }
 
-public partial class StormRespawnMode : GameModeBase
-{
-    public override MatchManager.Mode Id => MatchManager.Mode.StormRespawn;
-    public override string DisplayName => "Storm Respawn";
-    public override string LobbyDescription => "Free-for-all, timed combat. Players return at a safe map-edge zone after each death. The storm is visual only; the player with the most kills when time expires wins.";
-    public override int BaseKillPoints => 100;
-    public override bool HasTimedResolution => true;
-    public override bool UsesTeams => false;
-}
-
-public partial class ClanChaseMode : GameModeBase
-{
-    public override MatchManager.Mode Id => MatchManager.Mode.ClanChase;
-    public override string DisplayName => "Clan Chase";
-    public override string LobbyDescription => "Two larger teams fight as convoys, with multiple vehicles and a shared team garage. Teams have 3–5 players; the team with the most points wins when the host ends the match.";
-    public override string PlayerFormat => "2 teams · 3–5 players each";
-    public override int BaseKillPoints => 100;
-    public override bool UsesTeams => true;
-    public override int RecommendedTeamSize => 4;
-    public override int MinimumPlayers => 6;
-    public override int MaximumPlayers => 12;
-}
-
-public partial class CursedDeathmatchMode : GameModeBase
-{
-    public override MatchManager.Mode Id => MatchManager.Mode.CursedDeathmatch;
-    public override string DisplayName => "Cursed Deathmatch";
-    public override string LobbyDescription => "Timed on-foot free-for-all with no vehicles. All six cursed land events run at maximum intensity. The player with the most kills when time expires wins.";
-    public override int BaseKillPoints => 100;
-    public override bool UsesVehicles => false;
-    public override bool UsesCursedEvents => true;
-    public override bool HasTimedResolution => true;
-}
-
+/// <summary>
+/// Mode 3: Convoy Assault — 9v9 max, 7 rounds, first to 4 wins, 10 km corridor, 12-operator rotation with 4-round role cap (Master GDD Section 2.3 & 5.2).
+/// Dedicated objective numerics.
+/// </summary>
 public partial class ConvoyAssaultMode : GameModeBase
 {
     public override MatchManager.Mode Id => MatchManager.Mode.ConvoyAssault;
     public override string DisplayName => "Convoy Assault";
-    public override string LobbyDescription => "Asymmetric attack and defense. Attackers escort the STV to the checkpoint and hold it; defenders can disable the STV or destroy the checkpoint to remove the hold win path. At 3v3 the hold is 25 seconds with a 10-minute match; at 8v8 it is 60 seconds with a 20-minute match. If time expires first, team score, kills and individual score break ties.";
-    public override string PlayerFormat => "2 teams · 3–8 players each";
-    public override int BaseKillPoints => 100;
+    public override string LobbyDescription => "Asymmetric 9v9 tactical extraction across a 10 km corridor. 7-round series (first to 4 wins), sides swap each round. 12-operator rotation with 4-round role cap. Dedicated objective numerics: STV Advance, Checkpoints, Spike Strips, and STV Destruction.";
+    public override string PlayerFormat => "2 teams · up to 9v9 (18 players max)";
+    public override int BaseKillPoints => ConvoyAssaultController.PointsStandardEnemyKill;
     public override bool UsesTeams => true;
-    public override int RecommendedTeamSize => 3;
+    public override bool UsesVehicles => true;
+    public override bool UsesCursedEvents => false;
+    public override bool HasTimedResolution => true;
+    public override bool UsesUniversalKillStyles => false;
+    public override int RecommendedTeamSize => 9;
     public override int MinimumPlayers => 6;
-    public override bool HasTimedResolution => true;
-}
+    public override int MaximumPlayers => 18;
 
-public partial class DuoBuggyMode : GameModeBase
-{
-    public override MatchManager.Mode Id => MatchManager.Mode.DuoBuggy;
-    public override string DisplayName => "2v2 Duo Buggy";
-    public override string LobbyDescription => "Exactly four players form two two-person buggy crews in a timed, open-wasteland skirmish. Swap driver and shooter roles while moving. The higher-scoring team wins; ties break by kills, then individual score.";
-    public override string PlayerFormat => "2 teams · 2 players each · exactly 4 total";
-    public override int BaseKillPoints => 100;
-    public override bool UsesTeams => true;
-    public override int RecommendedTeamSize => 2;
-    public override int MinimumPlayers => 4;
-    public override int MaximumPlayers => 4;
-    public override bool HasTimedResolution => true;
+    public override BaseModeController CreateModeController() => new ConvoyAssaultController();
+
+    public override int CalculateKillPoints(long killerPeerId, long victimPeerId, KillStyle styles, int basePoints, bool isDriver, bool isShooter) =>
+        isDriver ? ConvoyAssaultController.PointsKillActiveDriver : ConvoyAssaultController.PointsStandardEnemyKill;
 }

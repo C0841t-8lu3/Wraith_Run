@@ -21,6 +21,7 @@ public partial class PlayerMovement : CharacterBody3D
     private const float CrouchedCapsuleHeight = 1.0f;
     private const float HeightTransitionSeconds = 0.2f;
     private const float SpeedTransitionSeconds = 0.12f;
+    public const float AdrenalineSpeedMultiplier = 1.20f;
     private const float AirControlMultiplier = 0.65f;
     private const float SlideSpeedMultiplier = 1.3f;
     private const float MaximumSlideSpeed = 9.4f;
@@ -131,6 +132,7 @@ public partial class PlayerMovement : CharacterBody3D
         _groundProbe = GetNode<ShapeCast3D>("GroundProbe");
         _head = GetNode<Node3D>("Head");
         _camera = GetNode<Camera3D>("Head/CameraShake/FirstPersonCamera");
+        _camera.Near = 0.05f;
         _viewModelManager = GetNodeOrNull<ViewModelManager>("Head/CameraShake/ViewModelManager");
         _weaponSwitcher = GetNodeOrNull<WeaponSwitcher>("WeaponSwitcher");
         _health = GetNodeOrNull<Health>("Health");
@@ -161,11 +163,19 @@ public partial class PlayerMovement : CharacterBody3D
         // Each client activates only its own camera. ViewModelManager separately hides this local
         // Armature only while a supported first-person rig is equipped. A bot shares host authority
         // but must never steal the host player's camera or show a first-person viewmodel.
-        _camera.Current = PlayerIdentity.IsLocalHuman(this);
-        // Touch devices have no cursor to capture; TouchControls drives look via screen drags
-        // instead (see _UnhandledInput below), so capturing here would just be a no-op on mobile.
-        if (PlayerIdentity.IsLocalHuman(this) && !OS.HasFeature("mobile"))
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+        if (PlayerIdentity.IsLocalHuman(this))
+        {
+            _camera.Current = true;
+            var armature = GetNodeOrNull<Node3D>("Armature");
+            if (armature != null) armature.Visible = false;
+            _savedArmatureVisible = false;
+            if (!OS.HasFeature("mobile"))
+                Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+        else
+        {
+            _camera.Current = false;
+        }
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -292,11 +302,21 @@ public partial class PlayerMovement : CharacterBody3D
             GlobalRotation = new Vector3(0, CurrentVehicle.GlobalRotation.Y, 0);
             Velocity = Vector3.Zero;
             State = MovementState.Crouch;
-            IsAiming = AimHeld() && CanCurrentWeaponAim();
+            IsAiming = (_health == null || !_health.IsDowned) && AimHeld() && CanCurrentWeaponAim();
             UpdateHeadAim((float)deltaValue);
             ReplicatedMovementState = State.ToString();
             ReplicatedAimState = IsAiming;
             _viewModelManager?.UpdateMovement(State);
+            return;
+        }
+        if (_health != null && _health.IsDowned)
+        {
+            Velocity = new Vector3(0.0f, Velocity.Y, 0.0f);
+            State = MovementState.Crouch;
+            ReplicatedMovementState = State.ToString();
+            ReplicatedAimState = false;
+            UpdateColliderAndHead((float)deltaValue, true);
+            MoveAndSlide();
             return;
         }
         float delta = (float)deltaValue;
@@ -369,10 +389,7 @@ public partial class PlayerMovement : CharacterBody3D
         if (PlayerIdentity.IsLocalHuman(this))
         {
             _camera.Current = true;
-            if (driver && !IsThirdPersonVehicleView)
-                GetNode<Node3D>("Armature").Visible = false;
-            else
-                GetNode<Node3D>("Armature").Visible = _savedArmatureVisible;
+            GetNode<Node3D>("Armature").Visible = IsThirdPersonVehicleView;
         }
     }
 
@@ -385,7 +402,7 @@ public partial class PlayerMovement : CharacterBody3D
         _vehicleAimYaw = 0.0f;
         _collisionShape.Disabled = _savedCollisionDisabled;
         _camera.Transform = _savedCameraTransform ?? Transform3D.Identity;
-        GetNode<Node3D>("Armature").Visible = _savedArmatureVisible;
+        GetNode<Node3D>("Armature").Visible = PlayerIdentity.IsLocalHuman(this) ? false : _savedArmatureVisible;
         GlobalPosition = exitPosition;
         GlobalRotation = new Vector3(0, vehicle.GlobalRotation.Y, 0);
         Velocity = Vector3.Zero;
@@ -395,10 +412,10 @@ public partial class PlayerMovement : CharacterBody3D
     public void SetVehicleCameraView(bool thirdPerson, GameVehicle vehicle)
     {
         if (CurrentVehicle != vehicle || !_vehicleDriver) return;
-        IsThirdPersonVehicleView = thirdPerson;
-        _camera.Position = thirdPerson ? new Vector3(0, 0.55f, 3.1f) : new Vector3(-0.28f, 0.05f, -0.05f);
-        _camera.Rotation = thirdPerson ? new Vector3(Mathf.DegToRad(9.0f), 0, 0) : Vector3.Zero;
-        GetNode<Node3D>("Armature").Visible = thirdPerson;
+        IsThirdPersonVehicleView = false;
+        _camera.Position = new Vector3(-0.28f, 0.05f, -0.05f);
+        _camera.Rotation = Vector3.Zero;
+        GetNode<Node3D>("Armature").Visible = false;
     }
 
     /// <summary>
@@ -444,7 +461,14 @@ public partial class PlayerMovement : CharacterBody3D
         // same if the FOV values are retuned. The old hardcoded 20 deg/0.15 s silently changed the
         // transition duration whenever the numbers moved.
         float range = Mathf.Max(Mathf.Abs(BaseFov - AimFov), Mathf.Abs(SprintFov - BaseFov));
-        float step = range * delta / Mathf.Max(FovTransitionSeconds, 0.001f);
+        float fovSeconds = Mathf.Max(FovTransitionSeconds, 0.001f);
+        bool isAdsTransition = IsAiming || targetFov == AimFov || (_camera.Fov < BaseFov - 0.01f && State != MovementState.Sprint);
+        if (_weaponSwitcher != null && isAdsTransition)
+        {
+            float adsMult = _weaponSwitcher.GetEffectiveAdsSpeedMultiplier();
+            if (adsMult > 0.001f) fovSeconds /= adsMult;
+        }
+        float step = range * delta / fovSeconds;
         _camera.Fov = Mathf.MoveToward(_camera.Fov, targetFov, step);
     }
 
@@ -525,6 +549,7 @@ public partial class PlayerMovement : CharacterBody3D
         bool sprintHeld = Bot != null ? Bot.Sprint : ActionHeld("sprint");
         bool sprinting = !crouchHeld && forwardish && (autoSprint || sprintHeld);
         float targetSpeed = crouchHeld ? CrouchSpeed : sprinting ? SprintSpeed : WalkSpeed;
+        if (_health != null && _health.IsAdrenalineActive) targetSpeed *= AdrenalineSpeedMultiplier;
         ApplyHorizontalVelocity(moveDirection * targetSpeed, delta, 1.0f);
 
         // MovementState.Aim survives only as an ANIMATION state, and only when it has no real
@@ -542,7 +567,9 @@ public partial class PlayerMovement : CharacterBody3D
     private void UpdateAirMovement(float delta, Vector3 moveDirection)
     {
         // Air has no independent speed limit; it only receives reduced acceleration toward input velocity.
-        ApplyHorizontalVelocity(moveDirection * WalkSpeed, delta, AirControlMultiplier);
+        float airSpeed = WalkSpeed;
+        if (_health != null && _health.IsAdrenalineActive) airSpeed *= AdrenalineSpeedMultiplier;
+        ApplyHorizontalVelocity(moveDirection * airSpeed, delta, AirControlMultiplier);
         SetState(Velocity.Y > 0.0f ? MovementState.Jump : MovementState.Fall);
     }
 

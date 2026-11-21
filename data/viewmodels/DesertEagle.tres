@@ -2,36 +2,44 @@
 
 [ext_resource type="Script" path="res://scripts/player/ViewModelWeaponData.cs" id="1_script"]
 [ext_resource type="PackedScene" path="res://art/animations/player/combat/fn 502/source/FPS_Anims.fbx" id="2_rig"]
+[ext_resource type="PackedScene" path="res://art/weapons/Pistols/Desert Eagle.glb" id="3_deagle"]
 [ext_resource type="PackedScene" path="res://art/animations/player/combat/AK/source/FpsAnims.fbx" id="4_reference"]
 
 [resource]
 script = ExtResource("1_script")
 WeaponName = "Desert Eagle"
 RigScene = ExtResource("2_rig")
+WeaponModelScene = ExtResource("3_deagle")
 AttachBoneName = "Main"
-AttachPosition = Vector3(-0.05, 0.07, 0.15)
-AttachRotationDegrees = Vector3(-90, 0, 0)
-AttachScale = Vector3(0.5, 0.5, 0.5)
-ViewPosition = Vector3(0, -0.167, -0.157)
+AttachPosition = Vector3(0, -0.05, 0.02)
+AttachRotationDegrees = Vector3(0, 0, 0)
+AttachScale = Vector3(0.46, 0.46, 0.46)
+ViewPosition = Vector3(0.08, -0.29, -0.2758)
 ViewRotationDegrees = Vector3(0, 180, 0)
+AimPositionOffset = Vector3(-0.1107, 0.2445, 0.12)
+AimRotationOffsetDegrees = Vector3(0, -4.10, 0)
+AimTransitionSeconds = 0.12
+HasScope = false
 ArmMeshNames = ["arms"]
 OriginalWeaponMeshNames = ["502_1_low_001"]
-OriginalMagazineMeshNames = ["Magazine"]
-HideOriginalWeapon = false
-HideOriginalMagazine = false
+OriginalMagazineMeshNames = ["m_low"]
+HideOriginalWeapon = true
+HideOriginalMagazine = true
 ClipMap = Dictionary[String, String]({
 "fire": "Armature|FN_Shot",
-"idle": "Armature|FN_Walk",
+"idle": "Armature|FN_DefPose",
 "reload": "Armature|FN_Reload",
 "reload_full": "Armature|FN_ReloadFull",
 "run": "Armature|FN_Run",
 "walk": "Armature|FN_Walk"
 })
+IdlePoseTime = 0.0
 NormalizationReferenceRig = ExtResource("4_reference")
 NormalizationReferenceArmMeshNames = ["arms"]
 CullMargin = 1.0
-MuzzlePointOffset = Vector3(0, 0, -0.4)
+MuzzleNodeName = "front_sight"
+MuzzlePointOffset = Vector3(0, 0, 0)
 MuzzleFlashEnabled = true
-MuzzleFlashScale = 0.9
+MuzzleFlashScale = 0.8
 MuzzleLightEnergy = 2.2
 MuzzleSpreadDegrees = 11.0

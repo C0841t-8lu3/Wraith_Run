@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://c8vj7akingame"]
+
+[ext_resource type="Script" path="res://scripts/tests/VerifyAkInGame.cs" id="1_vakingame"]
+
+[node name="VerifyAkInGame" type="Node"]
+script = ExtResource("1_vakingame")

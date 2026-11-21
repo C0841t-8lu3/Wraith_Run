@@ -1,0 +1,152 @@
+[gd_resource type="Resource" script_class="CharacterRegistry" load_steps=15 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/CharacterRegistry.cs" id="1_reg"]
+[ext_resource type="Script" path="res://scripts/data/CharacterData.cs" id="2_char"]
+
+[sub_resource type="Resource" id="Char_apex"]
+script = ExtResource("2_char")
+CharacterId = "driver_apex"
+DisplayName = "Cole \"Apex\" Vance"
+Class = 0
+SkillName = "Reinforced Chassis"
+TacticalDescription = "Reduces incoming vehicle collision damage and small-arms tire damage by 20%."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.72, 0.45, 0.22, 1)
+PantsColor = Color(0.2, 0.2, 0.2, 1)
+AccentColor = Color(0.85, 0.35, 0.1, 1)
+
+[sub_resource type="Resource" id="Char_shift"]
+script = ExtResource("2_char")
+CharacterId = "driver_shift"
+DisplayName = "Elena \"Shift\" Rostova"
+Class = 0
+SkillName = "Nitrous Overdrive"
+TacticalDescription = "Grants a 25% faster cooldown and extended active duration on vehicle boost charges."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.65, 0.5, 0.3, 1)
+PantsColor = Color(0.18, 0.18, 0.22, 1)
+AccentColor = Color(0.9, 0.6, 0.15, 1)
+
+[sub_resource type="Resource" id="Char_ghost"]
+script = ExtResource("2_char")
+CharacterId = "driver_ghost"
+DisplayName = "Tariq \"Ghost\" Al-Mansoor"
+Class = 0
+SkillName = "Slipstream"
+TacticalDescription = "Reduces vehicle signature visibility and enemy turret/pursuer tracking duration."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.4, 0.42, 0.45, 1)
+PantsColor = Color(0.15, 0.16, 0.18, 1)
+AccentColor = Color(0.3, 0.7, 0.85, 1)
+
+[sub_resource type="Resource" id="Char_tread"]
+script = ExtResource("2_char")
+CharacterId = "driver_tread"
+DisplayName = "Marcus \"Tread\" Boone"
+Class = 0
+SkillName = "Iron Rubber"
+TacticalDescription = "Improves off-road traction and prevents complete immobilization when tires are shot out."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.55, 0.38, 0.25, 1)
+PantsColor = Color(0.25, 0.22, 0.2, 1)
+AccentColor = Color(0.75, 0.5, 0.2, 1)
+
+[sub_resource type="Resource" id="Char_viper"]
+script = ExtResource("2_char")
+CharacterId = "shooter_viper"
+DisplayName = "Sloane \"Viper\" Kelly"
+Class = 5
+SkillName = "Precision Stabilizer"
+TacticalDescription = "Reduces weapon recoil by 15% while firing from inside a moving vehicle."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.28, 0.35, 0.25, 1)
+PantsColor = Color(0.18, 0.2, 0.16, 1)
+AccentColor = Color(0.85, 0.2, 0.2, 1)
+
+[sub_resource type="Resource" id="Char_rage"]
+script = ExtResource("2_char")
+CharacterId = "shooter_rage"
+DisplayName = "Dax \"Rage\" Holloway"
+Class = 5
+SkillName = "Hollow-Point Feed"
+TacticalDescription = "Deals 10% bonus damage against enemy vehicle armor plating and tires."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.38, 0.32, 0.28, 1)
+PantsColor = Color(0.16, 0.15, 0.15, 1)
+AccentColor = Color(0.95, 0.4, 0.1, 1)
+
+[sub_resource type="Resource" id="Char_spark"]
+script = ExtResource("2_char")
+CharacterId = "shooter_spark"
+DisplayName = "Kira \"Spark\" Chen"
+Class = 5
+SkillName = "Quick Draw"
+TacticalDescription = "Increases weapon reload and primary/secondary swap speeds by 20% in combat."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.32, 0.38, 0.42, 1)
+PantsColor = Color(0.15, 0.18, 0.2, 1)
+AccentColor = Color(1, 0.85, 0.2, 1)
+
+[sub_resource type="Resource" id="Char_flash"]
+script = ExtResource("2_char")
+CharacterId = "shooter_flash"
+DisplayName = "Leo \"Flash\" Sterling"
+Class = 5
+SkillName = "Overclocked Mag"
+TacticalDescription = "Increases magazine capacity across all assault rifles and SMGs by 15%."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.42, 0.4, 0.32, 1)
+PantsColor = Color(0.22, 0.2, 0.18, 1)
+AccentColor = Color(0.9, 0.75, 0.25, 1)
+
+[sub_resource type="Resource" id="Char_pulse"]
+script = ExtResource("2_char")
+CharacterId = "medic_pulse"
+DisplayName = "Maya \"Pulse\" Lin"
+Class = 3
+SkillName = "Rapid Triage"
+TacticalDescription = "Cuts downed teammate revival time in half during on-foot combat."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.6, 0.65, 0.68, 1)
+PantsColor = Color(0.22, 0.24, 0.26, 1)
+AccentColor = Color(0.9, 0.15, 0.2, 1)
+
+[sub_resource type="Resource" id="Char_patch"]
+script = ExtResource("2_char")
+CharacterId = "medic_patch"
+DisplayName = "Gus \"Patch\" Gallagher"
+Class = 3
+SkillName = "Field Mechanic"
+TacticalDescription = "Allows on-foot repair tools to restore small amounts of STV/Buggy HP directly in the field."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.52, 0.5, 0.44, 1)
+PantsColor = Color(0.26, 0.24, 0.22, 1)
+AccentColor = Color(0.85, 0.25, 0.15, 1)
+
+[sub_resource type="Resource" id="Char_stim"]
+script = ExtResource("2_char")
+CharacterId = "medic_stim"
+DisplayName = "Dr. Zane \"Stim\" Mercer"
+Class = 3
+SkillName = "Adrenaline Boost"
+TacticalDescription = "Healing a teammate grants both operators a 5-second movement and reload speed buff."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.48, 0.55, 0.52, 1)
+PantsColor = Color(0.2, 0.22, 0.21, 1)
+AccentColor = Color(0.2, 0.85, 0.45, 1)
+
+[sub_resource type="Resource" id="Char_anchor"]
+script = ExtResource("2_char")
+CharacterId = "medic_anchor"
+DisplayName = "Brody \"Anchor\" Hayes"
+Class = 3
+SkillName = "Guardian Shell"
+TacticalDescription = "Grants a +20 HP personal shield buffer while standing within 5 meters of a teammate or vehicle."
+MeshScenePath = "res://art/characters/AshenCorvus.fbx"
+JacketColor = Color(0.45, 0.48, 0.52, 1)
+PantsColor = Color(0.18, 0.2, 0.24, 1)
+AccentColor = Color(0.3, 0.6, 0.95, 1)
+
+[resource]
+script = ExtResource("1_reg")
+Characters = [SubResource("Char_apex"), SubResource("Char_shift"), SubResource("Char_ghost"), SubResource("Char_tread"), SubResource("Char_viper"), SubResource("Char_rage"), SubResource("Char_spark"), SubResource("Char_flash"), SubResource("Char_pulse"), SubResource("Char_patch"), SubResource("Char_stim"), SubResource("Char_anchor")]

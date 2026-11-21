@@ -7,3 +7,4 @@
 !scenes/maps/*.gen/*.res
 *.import    
 *.pdf
+./agent_read.md

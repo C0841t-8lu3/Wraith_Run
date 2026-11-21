@@ -1,0 +1,37 @@
+[gd_resource type="Resource" script_class="ViewModelWeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/player/ViewModelWeaponData.cs" id="1_script"]
+[ext_resource type="PackedScene" path="res://art/animations/player/combat/sledge hammer/source/FPS_Anims.glb" id="2_rig"]
+[ext_resource type="PackedScene" path="res://art/weapons/Melee/Karambit.glb" id="3_knife"]
+
+[resource]
+script = ExtResource("1_script")
+WeaponName = "Karambit"
+RigScene = ExtResource("2_rig")
+WeaponModelScene = ExtResource("3_knife")
+UseRigCameraTransform = true
+CameraBoneName = ""
+AttachBoneName = "hand.R_024"
+AttachPosition = Vector3(-0.12, 0.16, 0.0)
+AttachRotationDegrees = Vector3(45, 180, 45)
+AttachScale = Vector3(0.75, 0.75, 0.75)
+ViewPosition = Vector3(0.05, -0.18, 0.02)
+ViewRotationDegrees = Vector3(5, -5, 0)
+ViewScale = Vector3(0.9, 0.9, 0.9)
+ArmMeshNames = ["arms"]
+OriginalWeaponMeshNames = ["SledgeHammer_SledgeHammer_0"]
+OriginalMagazineMeshNames = []
+HideOriginalWeapon = true
+HideOriginalMagazine = true
+ClipMap = Dictionary[String, String]({
+"attack": "attack",
+"draw": "drawn",
+"drawn": "drawn",
+"fire": "attack",
+"idle": "idle",
+"put": "put",
+"run": "run",
+"walk": "walk"
+})
+CullMargin = 1.0
+MuzzleFlashEnabled = false

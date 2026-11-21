@@ -14,22 +14,25 @@ AttachRotationDegrees = Vector3(0, 0, 90)
 AttachScale = Vector3(0.5, 0.5, 0.5)
 ViewPosition = Vector3(0.08, -0.29, -0.2758)
 ViewRotationDegrees = Vector3(0, 180, 0)
+AimPositionOffset = Vector3(-0.127, 0.177, 0.12)
+AimTransitionSeconds = 0.1
+HasScope = false
 ArmMeshNames = PackedStringArray("arms")
 OriginalWeaponMeshNames = PackedStringArray("502_1_low_001")
 OriginalMagazineMeshNames = PackedStringArray("m_low")
 ClipMap = {
-"idle": "Armature|FN_Walk",
-"walk": "Armature|FN_Walk",
-"run": "Armature|FN_Run",
 "fire": "Armature|FN_Shot",
+"idle": "Armature|FN_DefPose",
 "reload": "Armature|FN_Reload",
-"reload_full": "Armature|FN_ReloadFull"
+"reload_full": "Armature|FN_ReloadFull",
+"run": "Armature|FN_Run",
+"walk": "Armature|FN_Walk"
 }
 IdlePoseTime = 0.0
 NormalizationReferenceRig = ExtResource("4_reference")
 NormalizationReferenceArmMeshNames = PackedStringArray("arms")
 HideOriginalWeapon = false
-HideOriginalMagazine = false
+HideOriginalMagazine = true
 MeshMaterials = {}
 CullMargin = 1.0
 MuzzlePointOffset = Vector3(0, 0, -0.35)

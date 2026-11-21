@@ -38,6 +38,8 @@ public partial class ViewModelBase : Node3D
 	private Vector3 _viewScalePivot = Vector3.Zero;
 	private float _aimBlend;
 	private bool _aiming;
+	private int _akPmagBone = -1;
+	private int _akPmag2Bone = -1;
 
 	public enum ViewModelAction { None, Draw, Fire, Reload }
 	private ViewModelAction _currentAction = ViewModelAction.None;
@@ -109,6 +111,7 @@ public partial class ViewModelBase : Node3D
 	private SpringVector3 _swayPosSpring;
 	private SpringVector3 _recoilKickSpring;
 	private Vector2 _smoothLookDelta;
+	private float _bobTimer = 0.0f;
 
 	public bool IsAiming => _aiming;
 	public bool IsActionBusy => _currentAction is ViewModelAction.Reload or ViewModelAction.Draw;
@@ -172,10 +175,13 @@ public partial class ViewModelBase : Node3D
 			rigCamera.ForceUpdateTransform();
 			_rig.ForceUpdateTransform();
 			Transform3D camInRig = _rig.GlobalTransform.AffineInverse() * rigCamera.GlobalTransform;
-			Transform3D rigWanted = camInRig.AffineInverse();
+			Basis camBasis = camInRig.Basis.Orthonormalized();
+			Basis wantedBasis = camBasis.Inverse();
+			Vector3 wantedOrigin = -(wantedBasis * camInRig.Origin);
+			Transform3D rigWanted = new Transform3D(wantedBasis, wantedOrigin);
 			_rig.Transform = rigWanted;
 			_rigBaseTransform = rigWanted;
-			_rigBaseScale = rigWanted.Basis.Scale;
+			_rigBaseScale = Vector3.One;
 			GD.Print($"VIEWMODEL aligned to rig camera: wanted_origin={rigWanted.Origin} wanted_rot={rigWanted.Basis.GetEuler() * (180.0f / Mathf.Pi)}");
 		}
 		else
@@ -210,9 +216,14 @@ public partial class ViewModelBase : Node3D
 
 	public void PlayMuzzleFire() => _muzzleFire?.Fire();
 
+	public float AdsSpeedMultiplier { get; set; } = 1.0f;
+	public float VisualKickMultiplier { get; set; } = 1.0f;
+
 	/// <summary>Called by the weapon manager every frame. The weapon itself moves to ADS; FOV is
 	/// still controlled by PlayerMovement, so both parts of the transition begin and end together.</summary>
 	public void SetAiming(bool aiming) => _aiming = aiming;
+	public void SetAdsSpeedMultiplier(float mult) => AdsSpeedMultiplier = Mathf.Max(0.05f, mult);
+	public void SetVisualKickMultiplier(float mult) => VisualKickMultiplier = Mathf.Max(0.0f, mult);
 
 	public override void _Process(double delta)
 	{
@@ -221,7 +232,8 @@ public partial class ViewModelBase : Node3D
 		bool canAim = Data.HasScope || Data.AimPositionOffset != Vector3.Zero || Data.WeaponName.Equals("Sniper", StringComparison.OrdinalIgnoreCase);
 		bool effectiveAiming = _aiming && canAim;
 
-		float duration = Mathf.Max(Data.AimTransitionSeconds, 0.001f);
+		float baseDuration = Mathf.Max(Data.AimTransitionSeconds, 0.001f);
+		float duration = Mathf.Max(baseDuration / Mathf.Max(AdsSpeedMultiplier, 0.05f), 0.001f);
 		float weight = 1.0f - Mathf.Exp(-dt / duration);
 		float prevAimBlend = _aimBlend;
 		_aimBlend = Mathf.Lerp(_aimBlend, effectiveAiming ? 1.0f : 0.0f, weight);
@@ -243,7 +255,99 @@ public partial class ViewModelBase : Node3D
 
 		if (_fireActionTimer > 0.0f) _fireActionTimer -= dt;
 
+		if (_skeleton != null && _akPmagBone >= 0)
+		{
+			UpdateAkMagazineVisibility();
+		}
+
+		if (_skeleton != null && Data?.WeaponName is "Karambit" or "Sledge Hammer")
+		{
+			int leftArmIdx = _skeleton.FindBone("upper_arm.L_01");
+			if (leftArmIdx >= 0)
+			{
+				_skeleton.SetBonePoseScale(leftArmIdx, Vector3.Zero);
+			}
+		}
+
+		if (_rig != null && Data != null && (Data.HasScope || Data.WeaponName.Equals("Sniper", StringComparison.OrdinalIgnoreCase)))
+		{
+			_rig.Visible = _aimBlend < 0.85f;
+		}
+
 		ApplyAimPose();
+	}
+
+	private void UpdateAkMagazineVisibility()
+	{
+		if (_skeleton == null || _akPmagBone < 0) return;
+
+		string currentAnim = _animationPlayer?.CurrentAnimation ?? string.Empty;
+		bool isReloading = _currentAction == ViewModelAction.Reload ||
+			currentAnim.Contains("Reload", StringComparison.OrdinalIgnoreCase);
+
+		if (!isReloading)
+		{
+			_skeleton.SetBonePoseScale(_akPmagBone, Vector3.One);
+			if (_akPmag2Bone >= 0) _skeleton.SetBonePoseScale(_akPmag2Bone, Vector3.Zero);
+			return;
+		}
+
+		float animTime = (float)(_animationPlayer?.CurrentAnimationPosition ?? 0.0);
+		bool isFullReload = _currentActionClip.Contains("Reload_full", StringComparison.OrdinalIgnoreCase) ||
+			currentAnim.Contains("Reload_full", StringComparison.OrdinalIgnoreCase);
+
+		Vector3 pmagScale = Vector3.One;
+		Vector3 pmag2Scale = Vector3.Zero;
+
+		if (isFullReload)
+		{
+			if (animTime < 0.60f)
+			{
+				pmagScale = Vector3.One;
+				pmag2Scale = Vector3.Zero;
+			}
+			else if (animTime < 1.40f)
+			{
+				pmagScale = Vector3.One;
+				pmag2Scale = Vector3.One;
+			}
+			else if (animTime < 2.05f)
+			{
+				pmagScale = Vector3.Zero;
+				pmag2Scale = Vector3.One;
+			}
+			else
+			{
+				pmagScale = Vector3.One;
+				pmag2Scale = Vector3.Zero;
+			}
+		}
+		else
+		{
+			if (animTime < 0.60f)
+			{
+				pmagScale = Vector3.One;
+				pmag2Scale = Vector3.Zero;
+			}
+			else if (animTime < 1.40f)
+			{
+				pmagScale = Vector3.One;
+				pmag2Scale = Vector3.One;
+			}
+			else if (animTime < 1.90f)
+			{
+				pmagScale = Vector3.Zero;
+				pmag2Scale = Vector3.One;
+			}
+			else
+			{
+				pmagScale = Vector3.One;
+				pmag2Scale = Vector3.Zero;
+			}
+		}
+
+		_skeleton.SetBonePoseScale(_akPmagBone, pmagScale);
+		if (_akPmag2Bone >= 0) _skeleton.SetBonePoseScale(_akPmag2Bone, pmag2Scale);
 	}
 
 	private void ApplyAimPose()
@@ -259,9 +363,9 @@ public partial class ViewModelBase : Node3D
 		if (finalRot.IsFinite()) RotationDegrees = finalRot;
 	}
 
-	public void AddRecoilKick()
+	public void AddRecoilKick(float overrideMult = 1.0f)
 	{
-		float adsFactor = Mathf.Lerp(1.0f, 0.25f, _aimBlend);
+		float adsFactor = Mathf.Lerp(1.0f, 0.25f, _aimBlend) * VisualKickMultiplier * overrideMult;
 
 		// Local +Z is toward the player camera (recoil kickback), +Y is upward barrel lift
 		_recoilKickSpring.Velocity += new Vector3(
@@ -307,6 +411,38 @@ public partial class ViewModelBase : Node3D
 		float targetPosY = Mathf.Clamp(localVelocity.Y * 0.0002f, -0.002f, 0.002f) * adsFactor;
 		float targetPosZ = Mathf.Clamp(localVelocity.Z * 0.0003f, -0.003f, 0.003f) * adsFactor;
 
+		// Procedural locomotion bobbing (walking/sprinting weapon sway)
+		float horizSpeed = new Vector2(localVelocity.X, localVelocity.Z).Length();
+		if (horizSpeed > 0.5f)
+		{
+			float bobFreq = Mathf.Clamp(horizSpeed * 2.2f, 6.0f, 14.0f);
+			_bobTimer += delta * bobFreq;
+
+			float bobAmp = Mathf.Clamp(horizSpeed / 6.0f, 0.2f, 1.0f) * adsFactor;
+			bool isAuthorClipStatic = _activeMovementGeneric switch
+			{
+				"walk" => _activeMovementClip == _idleClip || _activeMovementClip.Contains("Idle", StringComparison.OrdinalIgnoreCase),
+				"run" => _activeMovementClip == _idleClip || _activeMovementClip.Contains("Idle", StringComparison.OrdinalIgnoreCase) || _activeMovementClip == _resolvedClips.GetValueOrDefault("walk"),
+				_ => false
+			};
+			float bobMult = isAuthorClipStatic ? 1.0f : 0.12f;
+
+			float bobX = Mathf.Sin(_bobTimer * 0.5f) * 0.008f * bobAmp * bobMult;
+			float bobY = (Mathf.Cos(_bobTimer) - 1.0f) * 0.005f * bobAmp * bobMult;
+			float bobRotZ = Mathf.Sin(_bobTimer * 0.5f) * 1.2f * bobAmp * bobMult;
+			float bobRotX = Mathf.Cos(_bobTimer) * 0.8f * bobAmp * bobMult;
+
+			targetPosX += bobX;
+			targetPosY += bobY;
+			targetRoll += bobRotZ;
+			targetPitch += bobRotX;
+		}
+		else
+		{
+			_bobTimer = Mathf.MoveToward(_bobTimer, 0.0f, delta * 5.0f);
+		}
+
+		_swayRotSpring.Target = new Vector3(targetPitch, targetYaw, targetRoll);
 		_swayPosSpring.Target = new Vector3(targetPosX, targetPosY, targetPosZ);
 
 		// Snappy, critically damped springs for immediate, crisp response
@@ -353,6 +489,9 @@ public partial class ViewModelBase : Node3D
 			GD.PushWarning($"{Name}: rig '{Data.RigScene.ResourcePath}' is missing Skeleton3D or AnimationPlayer.");
 			return;
 		}
+
+		_akPmagBone = _skeleton.FindBone("Pmag");
+		_akPmag2Bone = _skeleton.FindBone("Pmag2");
 
 		// Never let an imported autoplay/default animation leave a weapon halfway through a clip.
 		_animationPlayer.Stop();
@@ -466,6 +605,11 @@ public partial class ViewModelBase : Node3D
 		if (_rig == null) return;
 		_rigBaseTransform = _rig.Transform;
 		_rigBaseScale = _rig.Scale;
+		if (Data?.UseRigCameraTransform == true)
+		{
+			_viewScalePivot = Vector3.Zero;
+			return;
+		}
 		Transform3D rigInverse = _rig.GlobalTransform.AffineInverse();
 		Aabb? bounds = null;
 		foreach (Node node in GetDescendants(_rig))
@@ -476,7 +620,12 @@ public partial class ViewModelBase : Node3D
 				Aabb local = TransformAabb(mesh.Mesh.GetAabb(), rigInverse * mesh.GlobalTransform);
 				bounds = bounds.HasValue ? bounds.Value.Merge(local) : local;
 			}
-		_viewScalePivot = bounds?.GetCenter() ?? Vector3.Zero;
+		Vector3 center = bounds?.GetCenter() ?? Vector3.Zero;
+		if (center.Length() > 5.0f)
+		{
+			center = Vector3.Zero;
+		}
+		_viewScalePivot = center;
 	}
 
 	private void ApplyViewScale()
@@ -514,6 +663,10 @@ public partial class ViewModelBase : Node3D
 		if (_resolvedClips.TryGetValue("idle", out string? idle))
 		{
 			_idleClip = idle;
+			if (Data != null && Data.IdlePoseTime >= 0.0f)
+			{
+				SynthesizeIdlePoseAnimation(idle, Data.IdlePoseTime);
+			}
 		}
 		else
 		{
@@ -531,6 +684,75 @@ public partial class ViewModelBase : Node3D
 					anim.LoopMode = Animation.LoopModeEnum.Linear;
 				}
 			}
+		}
+	}
+
+	private void SynthesizeIdlePoseAnimation(string sourceClipName, float time)
+	{
+		if (_animationPlayer == null || !_animationPlayer.HasAnimation(sourceClipName)) return;
+		Animation? source = _animationPlayer.GetAnimation(sourceClipName);
+		if (source == null) return;
+
+		var staticAnim = new Animation { Length = 1.0f, LoopMode = Animation.LoopModeEnum.Linear };
+		int trackCount = source.GetTrackCount();
+		for (int i = 0; i < trackCount; i++)
+		{
+			Animation.TrackType type = source.TrackGetType(i);
+			NodePath path = source.TrackGetPath(i);
+			int newTrack = staticAnim.AddTrack(type);
+			staticAnim.TrackSetPath(newTrack, path);
+			staticAnim.TrackSetInterpolationType(newTrack, Animation.InterpolationType.Linear);
+
+			switch (type)
+			{
+				case Animation.TrackType.Position3D:
+					Vector3 pos = source.PositionTrackInterpolate(i, time);
+					staticAnim.PositionTrackInsertKey(newTrack, 0.0, pos);
+					staticAnim.PositionTrackInsertKey(newTrack, 1.0, pos);
+					break;
+				case Animation.TrackType.Rotation3D:
+					Quaternion rot = source.RotationTrackInterpolate(i, time);
+					staticAnim.RotationTrackInsertKey(newTrack, 0.0, rot);
+					staticAnim.RotationTrackInsertKey(newTrack, 1.0, rot);
+					break;
+				case Animation.TrackType.Scale3D:
+					Vector3 scl = source.ScaleTrackInterpolate(i, time);
+					staticAnim.ScaleTrackInsertKey(newTrack, 0.0, scl);
+					staticAnim.ScaleTrackInsertKey(newTrack, 1.0, scl);
+					break;
+				case Animation.TrackType.Value:
+					Variant val = source.ValueTrackInterpolate(i, time);
+					staticAnim.TrackInsertKey(newTrack, 0.0, val);
+					staticAnim.TrackInsertKey(newTrack, 1.0, val);
+					break;
+			}
+		}
+
+		string libName = "";
+		AnimationLibrary? lib = null;
+		if (_animationPlayer.HasAnimationLibrary(""))
+		{
+			lib = _animationPlayer.GetAnimationLibrary("");
+		}
+		else
+		{
+			var list = _animationPlayer.GetAnimationLibraryList();
+			if (list.Count > 0)
+			{
+				libName = list[0].ToString();
+				lib = _animationPlayer.GetAnimationLibrary(libName);
+			}
+		}
+
+		if (lib != null)
+		{
+			string staticName = "__static_idle";
+			if (lib.HasAnimation(staticName)) lib.RemoveAnimation(staticName);
+			lib.AddAnimation(staticName, staticAnim);
+			string fullAnimName = string.IsNullOrEmpty(libName) ? staticName : $"{libName}/{staticName}";
+			_resolvedClips["idle"] = fullAnimName;
+			_idleClip = fullAnimName;
+			GD.Print($"VIEWMODEL synthesized rock-solid static idle pose '{fullAnimName}' from '{sourceClipName}' at t={time:F3}s");
 		}
 	}
 
@@ -558,9 +780,47 @@ public partial class ViewModelBase : Node3D
 		grip.AddChild(model);
 		_weaponModel = model;
 
-		// Where the rig's own gun sits in this viewmodel. Every rig was designed around the hands, so the new
-		// model is centred on that same spot: the hands then hold it the way they hold the rig's gun. The
-		// AttachPosition/AttachRotation/AttachScale values are fine adjustments on top of that alignment.
+		// Configure all meshes on the attached weapon model (layers, cull margins, shadows, materials)
+		foreach (Node node in GetDescendants(model))
+		{
+			if (node is MeshInstance3D mesh)
+			{
+				mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+				mesh.ExtraCullMargin = Mathf.Max(mesh.ExtraCullMargin, Data.CullMargin);
+				mesh.Layers = 1;
+				if (mesh.Mesh != null)
+				{
+					for (int surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
+					{
+						Material? active = mesh.MaterialOverride ?? mesh.GetSurfaceOverrideMaterial(surface) ?? mesh.Mesh.SurfaceGetMaterial(surface);
+						if (active is not BaseMaterial3D source) continue;
+						BaseMaterial3D twoSided = (BaseMaterial3D)source.Duplicate(true);
+						twoSided.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+						mesh.SetSurfaceOverrideMaterial(surface, twoSided);
+					}
+				}
+				if (Data.WeaponName == "Bazooka")
+				{
+					var rpgMat = new StandardMaterial3D
+					{
+						AlbedoColor = mesh.Name == "defaultMaterial_001" ? new Color(0.18f, 0.20f, 0.19f) : new Color(0.24f, 0.32f, 0.20f),
+						Metallic = mesh.Name == "defaultMaterial_001" ? 0.7f : 0.3f,
+						Roughness = 0.45f,
+						CullMode = BaseMaterial3D.CullModeEnum.Disabled
+					};
+					mesh.MaterialOverride = rpgMat;
+				}
+				else if (Data.WeaponName == "Desert Eagle")
+				{
+					ApplyDesertEagleMaterial(mesh);
+				}
+				else
+				{
+					EnsureAlbedoTexture(mesh);
+				}
+			}
+		}
+
 		model.Transform = Transform3D.Identity;
 		ApplyWeaponPlacement();
 		_magazineModel = string.IsNullOrEmpty(Data.MagazineNodeName) ? null : model.FindChild(Data.MagazineNodeName, true, false) as Node3D;
@@ -574,14 +834,16 @@ public partial class ViewModelBase : Node3D
 	private void ApplyWeaponPlacement()
 	{
 		if (Data == null || _skeleton == null || _weaponModel == null || _weaponGrip == null) return;
+		int boneIndex = _skeleton.FindBone(Data.AttachBoneName);
+		if (boneIndex < 0) return;
+
 		Basis rotation = Basis.FromEuler(Data.AttachRotationDegrees * (Mathf.Pi / 180.0f), EulerOrder.Yxz);
 		Basis scaled = rotation.Scaled(Data.AttachScale);
 		Vector3 modelCenter = LocalAabb(_weaponModel).GetCenter();
-		Vector3 rigCentre = RigGunCentreInRoot();
-		Vector3 anchor = (rigCentre != Vector3.Inf ? rigCentre : Vector3.Zero) + Data.AttachPosition;
+		Transform3D rootInverse = GlobalTransform.AffineInverse();
+		Vector3 bonePosInRoot = rootInverse * _skeleton.GlobalTransform * _skeleton.GetBoneGlobalPose(boneIndex).Origin;
+		Vector3 anchor = bonePosInRoot + Data.AttachPosition;
 		Transform3D wantedInRoot = new Transform3D(scaled, anchor - scaled * modelCenter);
-		int boneIndex = _skeleton.FindBone(Data.AttachBoneName);
-		if (boneIndex < 0) return;
 		Transform3D boneGlobal = _skeleton.GlobalTransform * _skeleton.GetBoneGlobalPose(boneIndex);
 		_weaponGrip.Transform = boneGlobal.AffineInverse() * GlobalTransform * wantedInRoot;
 	}
@@ -693,27 +955,39 @@ public partial class ViewModelBase : Node3D
 		{
 			Material? active = mesh.MaterialOverride ?? mesh.GetSurfaceOverrideMaterial(surface) ?? mesh.Mesh.SurfaceGetMaterial(surface);
 			if (active is BaseMaterial3D baseMaterial && baseMaterial.AlbedoTexture != null) continue;
-			BaseMaterial3D copy = active is BaseMaterial3D source
-				? (BaseMaterial3D)source.Duplicate(true)
-				: new StandardMaterial3D();
-			copy.AlbedoTexture = ResolveEmbeddedAlbedo(mesh.Name) ?? _neutralAlbedo;
-			if (mesh.MaterialOverride == null) mesh.SetSurfaceOverrideMaterial(surface, copy);
+			Texture2D? resolved = ResolveEmbeddedAlbedo(mesh.Name);
+			if (resolved != null)
+			{
+				BaseMaterial3D copy = active is BaseMaterial3D source
+					? (BaseMaterial3D)source.Duplicate(true)
+					: new StandardMaterial3D();
+				copy.AlbedoTexture = resolved;
+				if (mesh.MaterialOverride == null) mesh.SetSurfaceOverrideMaterial(surface, copy);
+			}
 		}
 	}
 
 	private Texture2D? ResolveEmbeddedAlbedo(StringName meshName)
 	{
 		if (Data == null) return null;
+		string mName = meshName.ToString();
 		string path = Data.WeaponName switch
 		{
-			"AK-47" when meshName.ToString() is "Ak" or "Mag_2" => "res://art/animations/player/combat/AK/textures/ak74m_AlbedoTransparency.png",
-			"M4" when meshName.ToString().StartsWith("BARREL", StringComparison.OrdinalIgnoreCase) => "res://art/animations/player/combat/M4/textures/m16_M16A3_BaseColor.png",
-			"Sniper" when meshName.ToString().StartsWith("Rifle", StringComparison.OrdinalIgnoreCase) => "res://art/animations/player/combat/Sniper/textures/Rifle_albedo.jpg",
-			"Kriss Vector" when meshName.ToString() is "main" or "mag" => "res://art/animations/player/combat/Vector/textures/Vector_D.png",
-			"Glock 19" or "Desert Eagle" or "FN 502" when meshName.ToString() == "502_1_low_001" => "res://art/animations/player/combat/fn 502/textures/material_diffuse.png",
-			"Shotgun" when meshName.ToString().StartsWith("12g_", StringComparison.Ordinal) => "res://art/animations/player/combat/benelli m4/textures/12gauge_BaseColor_red.png",
-			"Shotgun" when meshName.ToString().StartsWith("matchsaverz", StringComparison.OrdinalIgnoreCase) => "res://art/animations/player/combat/benelli m4/textures/matchsaverz_BaseColor_black_brand_friendly.png",
-			"Shotgun" when meshName.ToString().StartsWith("benelli_m4_", StringComparison.OrdinalIgnoreCase) => "res://art/animations/player/combat/benelli m4/textures/TTI_Benelli_M4_BaseColor_brand_friendly.png",
+			"AK-47" when mName is "Ak" or "Mag_2" => "res://art/animations/player/combat/AK/textures/ak74m_AlbedoTransparency.png",
+			"M4" when mName.StartsWith("BARREL", StringComparison.OrdinalIgnoreCase) => "res://art/animations/player/combat/M4/textures/m16_M16A3_BaseColor.png",
+			"Sniper" when mName.StartsWith("Rifle", StringComparison.OrdinalIgnoreCase) => "res://art/animations/player/combat/Sniper/textures/Rifle_albedo.jpg",
+			"Kriss Vector" when mName is "main" or "mag" => "res://art/animations/player/combat/Vector/textures/Vector_D.png",
+			"Kriss Vector" when mName == "Hand_Mesh" => "res://art/animations/player/combat/M4/textures/glove_hardknuckle_Base_color.png",
+			"Glock 19" => "res://art/weapons/Pistols/Glock 19_Image.png",
+			_ when mName is "sleeve" => "res://art/animations/player/combat/M4/textures/sleeve_st6_generalist_Base_color.png",
+			_ when mName is "hardknuckle" => "res://art/animations/player/combat/M4/textures/glove_hardknuckle_Base_color.png",
+			_ when mName is "arms" && Data.WeaponName is "Glock 19" or "Desert Eagle" or "FN 502" => "res://art/animations/player/combat/fn 502/textures/armColor.png",
+			_ when mName is "arms" && Data.WeaponName is "Sledge Hammer" or "Karambit" => "res://art/animations/player/combat/sledge hammer/source/FPS_Anims_Image_0.png",
+			_ when mName is "SledgeHammer_SledgeHammer_0" => "res://art/weapons/Melee/sledge_hammer_Image_0.png",
+			_ when mName == "502_1_low_001" => "res://art/animations/player/combat/fn 502/textures/material_diffuse.png",
+			"Shotgun" when mName.StartsWith("12g_", StringComparison.Ordinal) => "res://art/animations/player/combat/benelli m4/textures/12gauge_BaseColor_red.png",
+			"Shotgun" when mName.StartsWith("matchsaverz", StringComparison.OrdinalIgnoreCase) => "res://art/animations/player/combat/benelli m4/textures/matchsaverz_BaseColor_black_brand_friendly.png",
+			"Shotgun" when mName.StartsWith("benelli_m4_", StringComparison.OrdinalIgnoreCase) => "res://art/animations/player/combat/benelli m4/textures/TTI_Benelli_M4_BaseColor_brand_friendly.png",
 			_ => string.Empty
 		};
 		return string.IsNullOrEmpty(path) ? null : GD.Load<Texture2D>(path);
@@ -722,8 +996,45 @@ public partial class ViewModelBase : Node3D
 	private static Texture2D CreateNeutralAlbedoTexture()
 	{
 		Image image = Image.CreateEmpty(2, 2, false, Image.Format.Rgba8);
-		image.Fill(Colors.White);
+		image.Fill(new Color(0.25f, 0.25f, 0.28f));
 		return ImageTexture.CreateFromImage(image);
+	}
+
+	public static void ApplyDesertEagleMaterial(MeshInstance3D mesh)
+	{
+		string name = mesh.Name.ToString().ToLowerInvariant();
+		StandardMaterial3D mat = name switch
+		{
+			"grip" => new StandardMaterial3D
+			{
+				AlbedoColor = new Color(0.12f, 0.12f, 0.12f),
+				Metallic = 0.05f,
+				Roughness = 0.82f,
+				CullMode = BaseMaterial3D.CullModeEnum.Disabled
+			},
+			"barrel" or "slide" => new StandardMaterial3D
+			{
+				AlbedoColor = new Color(0.85f, 0.85f, 0.88f),
+				Metallic = 0.92f,
+				Roughness = 0.22f,
+				CullMode = BaseMaterial3D.CullModeEnum.Disabled
+			},
+			"front_sight" or "rear_sight" => new StandardMaterial3D
+			{
+				AlbedoColor = new Color(0.10f, 0.10f, 0.10f),
+				Metallic = 0.60f,
+				Roughness = 0.50f,
+				CullMode = BaseMaterial3D.CullModeEnum.Disabled
+			},
+			_ => new StandardMaterial3D
+			{
+				AlbedoColor = new Color(0.15f, 0.15f, 0.16f),
+				Metallic = 0.85f,
+				Roughness = 0.35f,
+				CullMode = BaseMaterial3D.CullModeEnum.Disabled
+			}
+		};
+		mesh.MaterialOverride = mat;
 	}
 
 	private void ReportWeaponLocalBounds(Node3D model)
@@ -782,12 +1093,7 @@ public partial class ViewModelBase : Node3D
 			_currentAction = ViewModelAction.None;
 			_currentActionClip = string.Empty;
 
-			_animationPlayer.Play(clip, 0.12, Mathf.Max(0.01f, speed * multiplier));
-			if (name == "idle" && Data != null && Data.IdlePoseTime >= 0 && clip.EndsWith("FN_Walk", StringComparison.Ordinal))
-			{
-				_animationPlayer.Seek(Data.IdlePoseTime, true);
-				_animationPlayer.Pause();
-			}
+			_animationPlayer.Play(clip, 0.22, Mathf.Max(0.01f, speed * multiplier));
 			return true;
 		}
 
@@ -807,7 +1113,7 @@ public partial class ViewModelBase : Node3D
 			return true;
 		}
 
-		if (name == "fire")
+		if (name == "fire" || name == "attack")
 		{
 			string fireClip = clip;
 			if (_aimBlend > 0.5f && _resolvedClips.TryGetValue("fire_aim", out string? scopedClip))
@@ -816,17 +1122,23 @@ public partial class ViewModelBase : Node3D
 			}
 			_currentAction = ViewModelAction.Fire;
 			_currentActionClip = fireClip;
-			_fireActionTimer = 0.12f;
+
+			bool isMelee = Data?.WeaponName is "Karambit" or "Sledge Hammer" || fireClip == "attack";
+			float clipLen = GetClipLength(fireClip);
+			float effectiveSpeed = Mathf.Max(0.01f, speed * multiplier);
+			_fireActionTimer = isMelee ? Mathf.Max(0.75f, clipLen / effectiveSpeed) : 0.12f;
+
 			if (_animationPlayer.IsPlaying() && _animationPlayer.CurrentAnimation == fireClip && _animationPlayer.SpeedScale > 0.0f)
 			{
 				_animationPlayer.Seek(0.0, true);
 			}
 			else
 			{
-				_animationPlayer.Play(fireClip, 0.02, Mathf.Max(0.01f, speed * multiplier));
+				float blendTime = isMelee ? 0.06f : 0.02f;
+				_animationPlayer.Play(fireClip, blendTime, effectiveSpeed);
 				_animationPlayer.Seek(0.0, true);
 			}
-			AddRecoilKick();
+			if (!isMelee) AddRecoilKick();
 			return true;
 		}
 

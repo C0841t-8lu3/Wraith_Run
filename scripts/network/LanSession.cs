@@ -10,6 +10,7 @@ public partial class LanSession : Node
 
 	public const int GamePort = 7777;
 	public const int DiscoveryPort = 7778;
+	public const int ProbePort = 7779;
 	private const int MaxPlayers = 15;
 
 	public bool IsHosting { get; private set; }
@@ -17,6 +18,7 @@ public partial class LanSession : Node
 	public string GameName { get; private set; } = string.Empty;
 	private string _sessionId = string.Empty;
 	private PacketPeerUdp? _broadcastPeer;
+	private PacketPeerUdp? _probePeer;
 	private ulong _nextBroadcastMs;
 	private bool _connecting;
 
@@ -64,6 +66,13 @@ public partial class LanSession : Node
 		_broadcastPeer = new PacketPeerUdp();
 		_broadcastPeer.SetBroadcastEnabled(true);
 		_broadcastPeer.SetDestAddress("255.255.255.255", DiscoveryPort);
+		_probePeer = new PacketPeerUdp();
+		_probePeer.SetBroadcastEnabled(true);
+		Error probeErr = _probePeer.Bind(ProbePort, "0.0.0.0");
+		if (probeErr != Error.Ok)
+		{
+			GD.PushWarning($"[LanSession] Could not bind probe listener on port {ProbePort}: {probeErr}");
+		}
 		BroadcastNow();
 		return Error.Ok;
 	}
@@ -134,6 +143,8 @@ public partial class LanSession : Node
 		_connecting = false;
 		_broadcastPeer?.Close();
 		_broadcastPeer = null;
+		_probePeer?.Close();
+		_probePeer = null;
 		IsHosting = false;
 		if (Multiplayer.MultiplayerPeer != null)
 			Multiplayer.MultiplayerPeer.Close();
@@ -142,7 +153,33 @@ public partial class LanSession : Node
 
 	public override void _Process(double delta)
 	{
-		if (IsHosting && Time.GetTicksMsec() >= _nextBroadcastMs) BroadcastNow();
+		if (!IsHosting) return;
+		if (_probePeer != null && _probePeer.GetAvailablePacketCount() > 0)
+		{
+			while (_probePeer.GetAvailablePacketCount() > 0)
+			{
+				byte[] pkt = _probePeer.GetPacket();
+				string fromIp = _probePeer.GetPacketIP();
+				int fromPort = _probePeer.GetPacketPort();
+				if (!string.IsNullOrEmpty(fromIp))
+				{
+					string ip = GetAdvertisedAddress();
+					string json = Json.Stringify(new Godot.Collections.Dictionary
+					{
+						["session"] = _sessionId,
+						["name"] = GameName,
+						["host"] = ip,
+						["port"] = ActiveGamePort,
+						["players"] = Multiplayer.GetPeers().Length + 1,
+						["map"] = MatchManager.Instance?.MapDisplayName ?? "Default",
+						["mode"] = MatchManager.Instance?.ModeRules?.DisplayName ?? "Default",
+					});
+					_broadcastPeer?.SetDestAddress(fromIp, fromPort > 0 ? fromPort : DiscoveryPort);
+					_broadcastPeer?.PutPacket(Encoding.UTF8.GetBytes(json));
+				}
+			}
+		}
+		if (Time.GetTicksMsec() >= _nextBroadcastMs) BroadcastNow();
 	}
 
 	private void BroadcastNow()
@@ -159,11 +196,18 @@ public partial class LanSession : Node
 			["map"] = MatchManager.Instance?.MapDisplayName ?? "Default",
 			["mode"] = MatchManager.Instance?.ModeRules?.DisplayName ?? "Default",
 		});
-		_broadcastPeer.PutPacket(Encoding.UTF8.GetBytes(json));
+		byte[] data = Encoding.UTF8.GetBytes(json);
+		_broadcastPeer.SetDestAddress("255.255.255.255", DiscoveryPort);
+		_broadcastPeer.PutPacket(data);
 		// Loopback makes Debug > Run Multiple Instances discover a local host too.
 		_broadcastPeer.SetDestAddress("127.0.0.1", DiscoveryPort);
-		_broadcastPeer.PutPacket(Encoding.UTF8.GetBytes(json));
-		_broadcastPeer.SetDestAddress("255.255.255.255", DiscoveryPort);
+		_broadcastPeer.PutPacket(data);
+
+		foreach (string target in LanMenu.GetHotspotProbeTargets())
+		{
+			_broadcastPeer.SetDestAddress(target, DiscoveryPort);
+			_broadcastPeer.PutPacket(data);
+		}
 		_nextBroadcastMs = Time.GetTicksMsec() + 1000;
 	}
 

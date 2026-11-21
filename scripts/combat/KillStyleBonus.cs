@@ -12,15 +12,15 @@ using System.Text;
 /// </summary>
 public static class KillStyleBonus
 {
-    // Part 6 bonus table. Identical in every mode, no exceptions.
-    public const int HeadshotBonus = 50;
-    public const int HipFireBonus = 25;
-    public const int NoScope360Bonus = 75;
-    public const int VergeOfDeathBonus = 50;
+    // Master GDD Section 5.1 Universal Kill-Style Bonus Table
+    public const int HeadshotBonus = 150;
+    public const int HipFireBonus = 125;
+    public const int NoScope360Bonus = 175;
+    public const int VergeOfDeathBonus = 120;
 
     /// <summary>One-shot multi-kill is a killer-side event, not a victim-side one: it is added once
     /// per multi-kill event on top of the sum of every victim's own base kill value.</summary>
-    public const int MultiKillBonus = 100;
+    public const int MultiKillBonus = 200;
 
     /// <summary>Assists go to the non-killing damager and never stack onto the killer's total.
     /// The floor is fixed by Part 6; above it the value scales with damage contribution.</summary>

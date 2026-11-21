@@ -18,7 +18,7 @@ using Godot;
 /// </summary>
 public partial class HubController : Node
 {
-	public const string HubScenePath = "res://scenes/Hub.tscn";
+	public const string HubScenePath = "res://scenes/hub/WarehouseHub.tscn";
 	public const string MatchScenePath = "res://scenes/GameWorld.tscn";
 	private const int MaxChatLength = 140;
 	private const double MinSecondsBetweenChats = 0.4;
@@ -105,7 +105,11 @@ public partial class HubController : Node
 		HubProps.Build(_world);
 		HubWeaponWall.Build(_world);
 
-		_tablet = new HubTablet { Name = "HubTablet" };
+		var tabletScene = ResourceLoader.Load<PackedScene>("res://scenes/hub/TacticalTablet.tscn")
+			?? ResourceLoader.Load<PackedScene>("res://scenes/HubTablet.tscn")
+			?? ResourceLoader.Load<PackedScene>("res://scenes/ui/HubTablet.tscn");
+		_tablet = tabletScene != null ? tabletScene.Instantiate<HubTablet>() : new HubTablet();
+		_tablet.Name = "HubTablet";
 		_world.AddChild(_tablet);
 
 		if (Multiplayer.IsServer())

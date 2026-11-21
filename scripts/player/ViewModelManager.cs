@@ -22,6 +22,8 @@ public partial class ViewModelManager : Node3D
 	private Vector2 _accumulatedLookDelta;
 	private Vector3 _playerVelocity;
 	private bool _isGrounded = true;
+	private float _adsSpeedMultiplier = 1.0f;
+	private float _visualKickMultiplier = 1.0f;
 
 	public ViewModelBase? ActiveViewModel => _activeViewModel;
 	public string ActiveWeaponName => _activeWeapon;
@@ -45,7 +47,9 @@ public partial class ViewModelManager : Node3D
 		if (!_localHuman) return;
 		_movement = player as PlayerMovement;
 		_armature = player?.GetNodeOrNull<Node3D>("Armature");
+		if (_armature != null) _armature.Visible = false;
 		_camera = player?.GetNodeOrNull<Camera3D>("Head/CameraShake/FirstPersonCamera");
+		if (_camera != null) _camera.Near = 0.05f;
 		_cameraMotion = GetParent() as ViewModelCameraMotion;
 		LoadWeaponData();
 		var tuner = new ViewModelTuner { Name = "ViewModelTuner", Manager = this };
@@ -111,6 +115,8 @@ public partial class ViewModelManager : Node3D
 		}
 		var viewModel = new ViewModelBase { Name = $"{weaponName.Replace(" ", string.Empty)}ViewModel" };
 		viewModel.Configure(data);
+		viewModel.SetAdsSpeedMultiplier(_adsSpeedMultiplier);
+		viewModel.SetVisualKickMultiplier(_visualKickMultiplier);
 		_activeViewModel = viewModel;
 		_lastMovementClip = string.Empty;
 		if (_camera != null) _camera.AddChild(viewModel);
@@ -136,6 +142,19 @@ public partial class ViewModelManager : Node3D
 
 	public void PlayMuzzleFire()
 	{ if (_localHuman) _activeViewModel?.PlayMuzzleFire(); }
+
+	public void SetAdsSpeedMultiplier(float mult)
+	{
+		_adsSpeedMultiplier = mult;
+		if (_localHuman) _activeViewModel?.SetAdsSpeedMultiplier(mult);
+	}
+
+	public void SetVisualKickMultiplier(float mult)
+	{
+		_visualKickMultiplier = mult;
+		if (_localHuman) _activeViewModel?.SetVisualKickMultiplier(mult);
+	}
+
 
 	public ViewModelWeaponData? GetWeaponData(string weaponName) =>
 		_weaponData.TryGetValue(weaponName, out ViewModelWeaponData? data) ? data : null;
@@ -356,7 +375,7 @@ public partial class ViewModelManager : Node3D
 				Node model = data.WeaponModelScene.Instantiate();
 				if (model.FindChild(data.MagazineNodeName, true, false) == null)
 					GD.PushWarning($"{data.WeaponName}: magazine node '{data.MagazineNodeName}' is missing in {data.WeaponModelScene.ResourcePath}.");
-				model.QueueFree();
+				model.Free();
 			}
 			string rigPath = data.RigScene.ResourcePath;
 			if (!clipNamesByRig.ContainsKey(rigPath))
@@ -367,7 +386,7 @@ public partial class ViewModelManager : Node3D
 				var bones = new Godot.Collections.Array<string>();
 				if (skeleton != null) for (int i = 0; i < skeleton.GetBoneCount(); i++) bones.Add(skeleton.GetBoneName(i));
 				clipNamesByRig[rigPath] = (animations?.GetAnimationList() ?? System.Array.Empty<string>(), bones);
-				rig.QueueFree();
+				rig.Free();
 			}
 			var rigInfo = clipNamesByRig[rigPath];
 			var resolved = new List<string>();
@@ -400,13 +419,12 @@ public partial class ViewModelManager : Node3D
 		{
 			_activeViewModel.Visible = false;
 			_animationPlayerStop(_activeViewModel);
-			_activeViewModel.GetParent()?.RemoveChild(_activeViewModel);
 			_activeViewModel.QueueFree();
 		}
 		_activeViewModel = null;
 		_lastMovementClip = string.Empty;
 		_cameraMotion?.SetViewModel(null);
-		if (_armature != null && IsInstanceValid(_armature)) _armature.Visible = true;
+		if (!_localHuman && _armature != null && IsInstanceValid(_armature)) _armature.Visible = true;
 	}
 
 	private static void _animationPlayerStop(ViewModelBase viewModel)

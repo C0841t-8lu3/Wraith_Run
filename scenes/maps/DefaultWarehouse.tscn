@@ -6,15 +6,28 @@
 
 [sub_resource type="Environment" id="WarehouseEnvironment"]
 background_mode = 1
-background_color = Color(0.17, 0.2, 0.21, 1)
+background_color = Color(0.12, 0.13, 0.15, 1)
 ambient_light_source = 2
-ambient_light_color = Color(0.42, 0.49, 0.47, 1)
-ambient_light_energy = 0.62
+ambient_light_color = Color(0.48, 0.52, 0.56, 1)
+ambient_light_energy = 0.85
 reflected_light_source = 1
-fog_enabled = true
-fog_light_color = Color(0.2, 0.24, 0.23, 1)
-fog_sun_scatter = 0.04
-fog_density = 0.008
+tonemap_mode = 3
+tonemap_exposure = 1.05
+tonemap_white = 1.0
+ssao_enabled = true
+ssao_radius = 1.6
+ssao_intensity = 2.0
+ssao_power = 1.4
+ssao_detail = 0.5
+glow_enabled = true
+glow_intensity = 0.6
+glow_bloom = 0.12
+glow_hdr_threshold = 0.95
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.012
+volumetric_fog_albedo = Color(0.24, 0.27, 0.3, 1)
+volumetric_fog_emission = Color(0.01, 0.015, 0.02, 1)
+volumetric_fog_emission_energy = 0.5
 
 [sub_resource type="BoxMesh" id="BoxMesh_1"]
 size = Vector3(33, 0.55, 28.7)
@@ -1757,8 +1770,8 @@ shape = SubResource("BoxShape3D_42dyi")
 [node name="WarehouseLight1" type="OmniLight3D" parent="." unique_id=2100000082]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 6.95, -9)
 light_color = Color(0.91, 0.73, 0.48, 1)
-light_energy = 2.4
-omni_range = 9.0
+light_energy = 2.8
+omni_range = 13.5
 
 [node name="FluorescentHousing2" type="StaticBody3D" parent="." unique_id=1200227618]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 7.35, -9)
@@ -1783,8 +1796,8 @@ shape = SubResource("BoxShape3D_l13di")
 [node name="WarehouseLight2" type="OmniLight3D" parent="." unique_id=2100000085]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 6.95, -9)
 light_color = Color(0.91, 0.73, 0.48, 1)
-light_energy = 2.4
-omni_range = 9.0
+light_energy = 2.8
+omni_range = 13.5
 
 [node name="FluorescentHousing3" type="StaticBody3D" parent="." unique_id=2006532009]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 7.35, 1)
@@ -1809,8 +1822,8 @@ shape = SubResource("BoxShape3D_74amu")
 [node name="WarehouseLight3" type="OmniLight3D" parent="." unique_id=2100000088]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 6.95, 1)
 light_color = Color(0.91, 0.73, 0.48, 1)
-light_energy = 2.4
-omni_range = 9.0
+light_energy = 2.8
+omni_range = 13.5
 
 [node name="FluorescentHousing4" type="StaticBody3D" parent="." unique_id=1738126934]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 7.35, 1)
@@ -1835,8 +1848,8 @@ shape = SubResource("BoxShape3D_h56y0")
 [node name="WarehouseLight4" type="OmniLight3D" parent="." unique_id=2100000091]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 6.95, 1)
 light_color = Color(0.91, 0.73, 0.48, 1)
-light_energy = 2.4
-omni_range = 9.0
+light_energy = 2.8
+omni_range = 13.5
 
 [node name="FluorescentHousing5" type="StaticBody3D" parent="." unique_id=815120715]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 7.35, 10)
@@ -1861,8 +1874,8 @@ shape = SubResource("BoxShape3D_06riu")
 [node name="WarehouseLight5" type="OmniLight3D" parent="." unique_id=2100000094]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 6.95, 10)
 light_color = Color(0.91, 0.73, 0.48, 1)
-light_energy = 2.4
-omni_range = 9.0
+light_energy = 2.8
+omni_range = 13.5
 
 [node name="FluorescentHousing6" type="StaticBody3D" parent="." unique_id=309535563]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 7.35, 10)
@@ -1887,8 +1900,26 @@ shape = SubResource("BoxShape3D_lpfpq")
 [node name="WarehouseLight6" type="OmniLight3D" parent="." unique_id=2100000097]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 6.95, 10)
 light_color = Color(0.91, 0.73, 0.48, 1)
-light_energy = 2.4
-omni_range = 9.0
+light_energy = 2.8
+omni_range = 13.5
+
+[node name="ArmoryNorthLight1" type="OmniLight3D" parent="." unique_id=2100000301]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.2, 5.2, -12.4)
+light_color = Color(0.94, 0.96, 1.0, 1)
+light_energy = 2.8
+omni_range = 11.0
+
+[node name="ArmoryNorthLight2" type="OmniLight3D" parent="." unique_id=2100000302]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0, 5.4, -12.4)
+light_color = Color(0.96, 0.98, 1.0, 1)
+light_energy = 3.2
+omni_range = 12.0
+
+[node name="ArmoryNorthLight3" type="OmniLight3D" parent="." unique_id=2100000303]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.2, 5.2, -12.4)
+light_color = Color(0.94, 0.96, 1.0, 1)
+light_energy = 2.8
+omni_range = 11.0
 
 [node name="ArmoryHeader" type="Label3D" parent="." unique_id=2100000098]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.28, -13.95)

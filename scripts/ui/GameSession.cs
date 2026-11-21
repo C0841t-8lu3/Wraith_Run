@@ -14,16 +14,19 @@ using Godot;
 /// </summary>
 public static class GameSession
 {
-    public const string MainMenuScene = "res://scenes/MainMenu.tscn";
-    public const string HubScene = "res://scenes/Hub.tscn";
+    public const string MainMenuScene = "res://scenes/hub/WarehouseHub.tscn";
+    public const string HubScene = "res://scenes/hub/WarehouseHub.tscn";
+    public const string FallbackHubScene = "res://scenes/Hub.tscn";
+
+    public static string ActiveHubScene => ResourceLoader.Exists(HubScene) ? HubScene : FallbackHubScene;
 
     /// <summary>Leaving a match for good (QUIT GAME in the pause menu): the connection is closed and
     /// you land in your own private hub - the hub replaced the old full-screen main menu.</summary>
     public static void LeaveToMainMenu(SceneTree tree)
     {
         TearDownSession(tree);
-        Error error = tree.ChangeSceneToFile(HubScene);
-        if (error != Error.Ok) GD.PushError($"Could not return to the hub ({HubScene}): {error}");
+        Error error = tree.ChangeSceneToFile(ActiveHubScene);
+        if (error != Error.Ok) GD.PushError($"Could not return to the hub ({ActiveHubScene}): {error}");
     }
 
     /// <summary>After a match: everybody meets again in the warehouse. The connection, the host's
@@ -34,8 +37,8 @@ public static class GameSession
         if (!OS.HasFeature("mobile")) Input.MouseMode = Input.MouseModeEnum.Visible;
         CareerTracker.Instance?.FinishMatch();
         MatchStats.Instance?.Reset();
-        Error error = tree.ChangeSceneToFile(HubScene);
-        if (error != Error.Ok) GD.PushError($"Could not return to the hub ({HubScene}): {error}");
+        Error error = tree.ChangeSceneToFile(ActiveHubScene);
+        if (error != Error.Ok) GD.PushError($"Could not return to the hub ({ActiveHubScene}): {error}");
     }
 
     public static void QuitToDesktop(SceneTree tree)

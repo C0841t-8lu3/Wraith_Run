@@ -260,7 +260,6 @@ public partial class PlayerAnimator : Node
 		{
 			if (left)
 			{
-				Warn("No dedicated walk_back_left animation; falling back to walk_back.");
 				return AnimLocomotionWalkBack;
 			}
 			return AnimLocomotionWalkBackRight;
@@ -273,7 +272,6 @@ public partial class PlayerAnimator : Node
 		{
 			if (left)
 			{
-				Warn("No dedicated strafe_left animation in locomotion_lib; falling back to walk_fwd_left.");
 				return AnimLocomotionWalkFwdLeft;
 			}
 			return AnimLocomotionStrafeRight;

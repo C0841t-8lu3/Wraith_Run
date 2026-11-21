@@ -30,6 +30,7 @@ public partial class PlayerNetworkSynchronizer : Node
 		config.AddProperty(new NodePath(".:ReplicatedMovementState"));
 		config.AddProperty(new NodePath(".:ReplicatedAimState"));
 		config.AddProperty(new NodePath("Health:CurrentHealth"));
+		config.AddProperty(new NodePath("Health:CurrentShield"));
 		config.AddProperty(new NodePath("WeaponSwitcher:ReplicatedWeaponIndex"));
 		// Scores are awarded by the owning device only (see PlayerScore), then replicated out so
 		// every peer can display the same total.

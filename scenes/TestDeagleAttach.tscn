@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://cb5deagletest"]
+
+[ext_resource type="Script" path="res://scripts/tests/TestDeagleAttach.cs" id="1_test"]
+
+[node name="TestDeagleAttach" type="Node"]
+script = ExtResource("1_test")

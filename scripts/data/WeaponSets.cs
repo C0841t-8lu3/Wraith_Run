@@ -19,6 +19,8 @@ public enum WeaponCategory
     Shotgun,
     Sniper,
     Pistol,
+    Melee,
+    AntiVehicle,
 }
 
 /// <summary>
@@ -64,8 +66,8 @@ public static class WeaponRules
     public static WeaponCategory[] CategoriesFor(WeaponSlot slot) => slot switch
     {
         WeaponSlot.Primary1 or WeaponSlot.Primary2 =>
-            new[] { WeaponCategory.AssaultRifle, WeaponCategory.Smg, WeaponCategory.Shotgun, WeaponCategory.Sniper },
-        WeaponSlot.Pistol => new[] { WeaponCategory.Pistol },
+            new[] { WeaponCategory.AssaultRifle, WeaponCategory.Smg, WeaponCategory.Shotgun, WeaponCategory.Sniper, WeaponCategory.AntiVehicle },
+        WeaponSlot.Pistol => new[] { WeaponCategory.Pistol, WeaponCategory.Melee },
         _ => Array.Empty<WeaponCategory>(),
     };
 
@@ -78,6 +80,8 @@ public static class WeaponRules
         WeaponCategory.Shotgun => "SHOTGUNS",
         WeaponCategory.Sniper => "SNIPER RIFLES",
         WeaponCategory.Pistol => "PISTOLS",
+        WeaponCategory.Melee => "MELEE",
+        WeaponCategory.AntiVehicle => "ANTI-VEHICLE",
         _ => string.Empty,
     };
 
@@ -88,22 +92,29 @@ public static class WeaponRules
         WeaponCategory.Shotgun => "wpn-shotgun",
         WeaponCategory.Sniper => "rifle",
         WeaponCategory.Pistol => "wpn-pistol",
+        WeaponCategory.Melee => "wpn-melee",
+        WeaponCategory.AntiVehicle => "wpn-launcher",
         _ => "rifle",
     };
 
     /// <summary>Which family a weapon belongs to, from its WeaponClass string in the registry.</summary>
     public static WeaponCategory? CategoryOf(WeaponData weapon)
     {
-        switch (weapon.WeaponClass.Replace(" ", string.Empty).ToLowerInvariant())
+        switch (weapon.WeaponClass.Replace(" ", string.Empty).Replace("-", string.Empty).ToLowerInvariant())
         {
             case "assaultrifle": return WeaponCategory.AssaultRifle;
-            case "smg": return WeaponCategory.Smg;
+            case "smg":
+            case "smg/pdw":
+            case "pdw": return WeaponCategory.Smg;
             case "shotgun": return WeaponCategory.Shotgun;
             case "sniper":
             case "sniperrifle":
             case "marksmanrifle": return WeaponCategory.Sniper;
             case "pistol":
             case "sidearm": return WeaponCategory.Pistol;
+            case "melee": return WeaponCategory.Melee;
+            case "antivehicle":
+            case "launcher": return WeaponCategory.AntiVehicle;
             default: return null;
         }
     }

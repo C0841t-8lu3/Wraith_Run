@@ -561,9 +561,8 @@ public partial class LanMenu : Control
 
 	private static int[] PlayerCountOptions(MatchManager.Mode mode) => mode switch
 	{
-		MatchManager.Mode.StormRespawn or MatchManager.Mode.CursedDeathmatch => new[] { 6, 10, 12 },
-		MatchManager.Mode.ClanChase or MatchManager.Mode.ConvoyAssault => new[] { 6, 8, 10, 12 },
-		MatchManager.Mode.DuoBuggy => new[] { 4 },
+		MatchManager.Mode.ConvoyAssault => new[] { 6, 8, 10, 12, 14, 16, 18 },
+		MatchManager.Mode.PureChase => new[] { 4 },
 		_ => new[] { 4, 6, 8, 10, 12 },
 	};
 
@@ -871,6 +870,179 @@ public partial class LanMenu : Control
 		ShowReadyLobby(isHost: true);
 	}
 
+	public struct DiscoveredSession
+	{
+		public string SessionId;
+		public string Name;
+		public string Host;
+		public int Port;
+		public int Players;
+		public string Map;
+		public string Mode;
+		public ulong Seen;
+		public bool IsHotspot;
+	}
+
+	public static event Action? HotspotSessionsUpdated;
+	public static readonly Dictionary<string, DiscoveredSession> DiscoveredSessions = new();
+	private static PacketPeerUdp? _sharedDiscoveryListener;
+	private static double _lastProbeTime;
+
+	public static bool IsHotspotAddress(string ip)
+	{
+		if (string.IsNullOrWhiteSpace(ip)) return false;
+		if (ip.StartsWith("192.168.43.")) return true;   // Android Wi-Fi hotspot
+		if (ip.StartsWith("172.20.10.")) return true;    // iOS Personal Hotspot
+		if (ip.StartsWith("192.168.137.")) return true;   // Windows Mobile Hotspot
+		if (ip.StartsWith("192.168.42.")) return true;    // USB Tethering
+		return false;
+	}
+
+	public static List<string> GetHotspotProbeTargets()
+	{
+		var targets = new HashSet<string>
+		{
+			"255.255.255.255",
+			"127.0.0.1",
+			"192.168.43.1",
+			"192.168.43.255",
+			"172.20.10.1",
+			"172.20.10.15",
+			"172.20.10.255",
+			"192.168.137.1",
+			"192.168.137.255",
+			"192.168.42.1",
+			"192.168.42.129",
+			"192.168.42.255",
+		};
+		foreach (string addr in IP.GetLocalAddresses())
+		{
+			if (addr.StartsWith("127.") || addr.StartsWith("169.254.") || !addr.Contains('.')) continue;
+			int lastDot = addr.LastIndexOf('.');
+			if (lastDot > 0)
+			{
+				string prefix = addr.Substring(0, lastDot);
+				targets.Add($"{prefix}.1");
+				targets.Add($"{prefix}.255");
+			}
+		}
+		return new List<string>(targets);
+	}
+
+	public static void StartHotspotDiscovery()
+	{
+		ulong now = Time.GetTicksMsec();
+		foreach (string key in new List<string>(DiscoveredSessions.Keys))
+		{
+			if (now - DiscoveredSessions[key].Seen > 4000)
+				DiscoveredSessions.Remove(key);
+		}
+
+		if (_sharedDiscoveryListener == null)
+		{
+			_sharedDiscoveryListener = new PacketPeerUdp();
+			_sharedDiscoveryListener.SetBroadcastEnabled(true);
+			Error error = _sharedDiscoveryListener.Bind(LanSession.DiscoveryPort, "0.0.0.0");
+			if (error != Error.Ok)
+			{
+				GD.PushWarning($"[LanMenu] Hotspot discovery bind error on port {LanSession.DiscoveryPort}: {error}");
+			}
+		}
+		SendDiscoveryProbes();
+	}
+
+	public static void SendDiscoveryProbes()
+	{
+		if (_sharedDiscoveryListener == null) return;
+		byte[] ping = Encoding.UTF8.GetBytes(Json.Stringify(new Godot.Collections.Dictionary
+		{
+			["query"] = "wr_ping",
+			["time"] = Time.GetTicksMsec(),
+		}));
+		foreach (string target in GetHotspotProbeTargets())
+		{
+			_sharedDiscoveryListener.SetDestAddress(target, LanSession.ProbePort);
+			_sharedDiscoveryListener.PutPacket(ping);
+			_sharedDiscoveryListener.SetDestAddress(target, LanSession.DiscoveryPort);
+			_sharedDiscoveryListener.PutPacket(ping);
+		}
+	}
+
+	public static bool PollHotspotDiscovery(double delta = 0.5)
+	{
+		if (_sharedDiscoveryListener == null) return false;
+		_lastProbeTime += delta;
+		if (_lastProbeTime >= 1.0)
+		{
+			_lastProbeTime = 0;
+			SendDiscoveryProbes();
+		}
+
+		bool changed = false;
+		while (_sharedDiscoveryListener.GetAvailablePacketCount() > 0)
+		{
+			byte[] packetData = _sharedDiscoveryListener.GetPacket();
+			string sourceHost = _sharedDiscoveryListener.GetPacketIP();
+			var parsed = Json.ParseString(Encoding.UTF8.GetString(packetData));
+			if (parsed.VariantType != Variant.Type.Dictionary) continue;
+			var packet = parsed.AsGodotDictionary();
+			if (packet.ContainsKey("query")) continue;
+
+			string advertisedHost = packet.GetValueOrDefault("host", "").AsString();
+			string host = string.IsNullOrWhiteSpace(sourceHost) ? advertisedHost : sourceHost;
+			if (string.IsNullOrEmpty(host)) continue;
+
+			string sessionId = packet.GetValueOrDefault("session", host).AsString();
+			string name = packet.GetValueOrDefault("name", DefaultGameName).AsString();
+			int port = (int)packet.GetValueOrDefault("port", LanSession.GamePort).AsInt64();
+			int players = (int)packet.GetValueOrDefault("players", 1).AsInt64();
+			string mapName = packet.GetValueOrDefault("map", "Map not reported").AsString();
+			string modeName = packet.GetValueOrDefault("mode", "Mode not reported").AsString();
+			bool isHotspot = IsHotspotAddress(host) || IsHotspotAddress(advertisedHost);
+
+			var entry = new DiscoveredSession
+			{
+				SessionId = sessionId,
+				Name = name,
+				Host = host,
+				Port = port,
+				Players = players,
+				Map = mapName,
+				Mode = modeName,
+				Seen = Time.GetTicksMsec(),
+				IsHotspot = isHotspot,
+			};
+
+			if (!DiscoveredSessions.TryGetValue(sessionId, out var prior) ||
+				prior.Name != name || prior.Host != host || prior.Port != port ||
+				prior.Players != players || prior.Map != mapName || prior.Mode != modeName ||
+				prior.IsHotspot != isHotspot)
+			{
+				changed = true;
+			}
+			DiscoveredSessions[sessionId] = entry;
+		}
+
+		ulong now = Time.GetTicksMsec();
+		foreach (string key in new List<string>(DiscoveredSessions.Keys))
+		{
+			if (now - DiscoveredSessions[key].Seen > 4000)
+			{
+				DiscoveredSessions.Remove(key);
+				changed = true;
+			}
+		}
+
+		if (changed) HotspotSessionsUpdated?.Invoke();
+		return changed;
+	}
+
+	public static void StopHotspotDiscovery()
+	{
+		_sharedDiscoveryListener?.Close();
+		_sharedDiscoveryListener = null;
+	}
+
 	private void StartBrowsing()
 	{
 		if (_terminalCleanupDone) return;
@@ -879,65 +1051,69 @@ public partial class LanMenu : Control
 		_refreshTimer.WaitTime = 0.5;
 		_games.Clear();
 		_leavingMenu = false;
-		_listener = new PacketPeerUdp();
-		Error error = _listener.Bind(LanSession.DiscoveryPort, "0.0.0.0");
-		if (error != Error.Ok)
-		{
-			UiSounds.Play(UiSounds.Sound.Error);
-			if (IsUsable(_status)) _status!.Text = $"Discovery listener unavailable: {error}";
-		}
-		else _refreshTimer.Start();
+		StartHotspotDiscovery();
+		_refreshTimer.Start();
 	}
 
 	private void PollDiscovery()
 	{
-		if (_leavingMenu || _listener == null || !IsUsable(_gamesList)) return;
-		bool changed = false;
-		while (_listener.GetAvailablePacketCount() > 0)
-		{
-			var parsed = Json.ParseString(Encoding.UTF8.GetString(_listener.GetPacket()));
-			if (parsed.VariantType != Variant.Type.Dictionary) continue;
-			var packet = parsed.AsGodotDictionary();
-			// The advertised address may be a VPN/container interface when the host has several
-			// adapters. Use the address this beacon actually arrived from so ENet connects over
-			// the same reachable route (and the loopback beacon resolves to 127.0.0.1 locally).
-			string advertisedHost = packet.GetValueOrDefault("host", "").AsString();
-			string sourceHost = _listener.GetPacketIP();
-			string host = string.IsNullOrWhiteSpace(sourceHost) ? advertisedHost : sourceHost;
-			string sessionId = packet.GetValueOrDefault("session", host).AsString();
-			string name = packet.GetValueOrDefault("name", DefaultGameName).AsString();
-			int port = (int)packet.GetValueOrDefault("port", LanSession.GamePort).AsInt64();
-			int players = (int)packet.GetValueOrDefault("players", 1).AsInt64();
-			string mapName = packet.GetValueOrDefault("map", "Map not reported").AsString();
-			string modeName = packet.GetValueOrDefault("mode", "Mode not reported").AsString();
-			if (!string.IsNullOrEmpty(host))
-			{
-				var advertised = (name, host, port, players, mapName, modeName, Time.GetTicksMsec());
-				if (!_games.TryGetValue(sessionId, out var prior) || prior.Name != name || prior.Host != host || prior.Port != port || prior.Players != players ||
-					prior.Map != mapName || prior.Mode != modeName)
-					changed = true;
-				_games[sessionId] = advertised;
-			}
-		}
-		foreach (string key in new List<string>(_games.Keys))
-			if (Time.GetTicksMsec() - _games[key].Seen > 3000) { _games.Remove(key); changed = true; }
-		if (changed) RefreshGames();
+		if (_leavingMenu || !IsUsable(_gamesList)) return;
+		bool changed = PollHotspotDiscovery(0.5);
+		if (changed || _gamesList.GetChildCount() != DiscoveredSessions.Count)
+			RefreshGames();
 	}
 
 	private void RefreshGames()
 	{
 		if (_leavingMenu || !IsUsable(_gamesList)) return;
 		QueueFreeChildren(_gamesList);
-		foreach (var game in _games.Values)
+
+		var sessions = DiscoveredSessions.Values;
+		foreach (var game in sessions)
+		{
+			if (game.IsHotspot)
+			{
+				var alert = new PanelContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+				var alertStyle = new StyleBoxFlat
+				{
+					BgColor = new Color(0.15f, 0.10f, 0.02f, 0.9f),
+					BorderColor = new Color(1.0f, 0.75f, 0.2f),
+				};
+				alertStyle.SetBorderWidthAll(1);
+				alertStyle.SetCornerRadiusAll(4);
+				alertStyle.ContentMarginLeft = 12;
+				alertStyle.ContentMarginRight = 12;
+				alertStyle.ContentMarginTop = 8;
+				alertStyle.ContentMarginBottom = 8;
+				alert.AddThemeStyleboxOverride("panel", alertStyle);
+
+				var aRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+				aRow.AddThemeConstantOverride("separation", 12);
+				aRow.AddChild(MenuStyle.Icon("wifi", 22, 22, new Color(1.0f, 0.75f, 0.2f)));
+
+				var textCol = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+				textCol.AddThemeConstantOverride("separation", -2);
+				textCol.AddChild(MenuStyle.Text("HOTSPOT SESSION DETECTED", 16, new Color(1.0f, 0.75f, 0.2f), MenuStyle.Bold));
+				textCol.AddChild(MenuStyle.Text($"{game.Name}  ·  {game.Mode}  ·  {game.Host}:{game.Port}", 14, MenuStyle.TextDim));
+				aRow.AddChild(textCol);
+
+				aRow.AddChild(MenuStyle.Primary("CONNECT", new Vector2(130, 36), () => JoinGame(game.Host, game.Port)));
+				alert.AddChild(aRow);
+				_gamesList!.AddChild(alert);
+			}
+		}
+
+		foreach (var game in sessions)
 		{
 			string host = game.Host;
 			int port = game.Port;
 			string portSuffix = port != LanSession.GamePort ? $":{port}" : "";
-			string detail = $"{game.Map}  ·  {game.Mode}  ·  {host}{portSuffix}  ·  {game.Players} player{(game.Players == 1 ? "" : "s")}";
-			_gamesList!.AddChild(MenuStyle.Row(game.Name, detail, () => JoinGame(host, port), UiSounds.Sound.Start));
+			string hotspotTag = game.IsHotspot ? " [HOTSPOT]" : "";
+			string detail = $"{game.Map}  ·  {game.Mode}  ·  {host}{portSuffix}  ·  {game.Players} player{(game.Players == 1 ? "" : "s")}{hotspotTag}";
+			_gamesList!.AddChild(MenuStyle.Row(game.Name + hotspotTag, detail, () => JoinGame(host, port), UiSounds.Sound.Start));
 		}
 		if (IsUsable(_status))
-			_status!.Text = _games.Count == 0 ? "Listening for games…" : "Select a game to join.";
+			_status!.Text = DiscoveredSessions.Count == 0 ? "Listening for games…" : $"{DiscoveredSessions.Count} game(s) found.";
 	}
 
 	private void JoinGame(string host, int port = LanSession.GamePort)
@@ -1099,6 +1275,7 @@ public partial class LanMenu : Control
 	private void StopLobbyBrowser()
 	{
 		if (IsUsable(_refreshTimer)) _refreshTimer.Stop();
+		StopHotspotDiscovery();
 		if (IsUsable(_listener)) _listener!.Close();
 		_listener = null;
 	}

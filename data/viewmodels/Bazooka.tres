@@ -1,0 +1,45 @@
+[gd_resource type="Resource" script_class="ViewModelWeaponData" format=3 uid="uid://bzk001viewmodel"]
+
+[ext_resource type="Script" path="res://scripts/player/ViewModelWeaponData.cs" id="1_script"]
+[ext_resource type="PackedScene" path="res://art/animations/player/combat/M4/source/m4_assult_rfile.fbx" id="2_rig"]
+[ext_resource type="PackedScene" path="res://art/weapons/RPG/RPG.glb" id="3_model"]
+
+[resource]
+script = ExtResource("1_script")
+WeaponName = "Bazooka"
+RigScene = ExtResource("2_rig")
+WeaponModelScene = ExtResource("3_model")
+UseRigCameraTransform = true
+CameraBoneName = "camera"
+AttachBoneName = "Base"
+AttachPosition = Vector3(-0.16, -0.06, -0.45)
+AttachRotationDegrees = Vector3(0, 90, 0)
+AttachScale = Vector3(0.5, 0.5, 0.5)
+ViewPosition = Vector3(0.12, -0.10, -0.04)
+ViewRotationDegrees = Vector3(0, 0, 0)
+ViewScale = Vector3(0.042, 0.042, 0.042)
+AimPositionOffset = Vector3(-0.10, 0.06, 0.06)
+AimTransitionSeconds = 0.15
+HasScope = false
+ArmMeshNames = Array[String](["sleeve", "hardknuckle"])
+OriginalWeaponMeshNames = Array[String](["BARREL", "BARREL_001", "BARREL_002"])
+HideOriginalWeapon = true
+HideOriginalMagazine = true
+ClipMap = Dictionary[String, String]({
+"draw": "Armature|Take",
+"fire": "Armature|Shoot",
+"idle": "Armature|Idle",
+"reload": "Armature|Reload",
+"reload_full": "Armature|Reload",
+"run": "Armature|Idle",
+"walk": "Armature|Idle"
+})
+NormalizationReferenceRig = ExtResource("2_rig")
+NormalizationReferenceArmMeshNames = Array[String](["sleeve", "hardknuckle"])
+CullMargin = 1.0
+MuzzlePointOffset = Vector3(0, 0, -1.2)
+MuzzleFlashEnabled = true
+MuzzleFlashScale = 1.6
+MuzzleLightEnergy = 3.5
+MuzzleParticleSpeed = 8.0
+MuzzleSpreadDegrees = 15.0

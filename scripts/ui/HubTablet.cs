@@ -19,7 +19,7 @@ public partial class HubTablet : CanvasLayer
 {
     public static HubTablet? Instance { get; private set; }
 
-    private enum Section { Home, Play, Operator, Status, Chat, Settings }
+    private enum Section { Home, Play, Loadout, Operator, Status, Chat, Settings }
     private enum PlayStep { Home, Host, Join, Solo }
 
     private const int MaxFeedLines = 7;
@@ -44,6 +44,9 @@ public partial class HubTablet : CanvasLayer
     private bool InSession => _hub != null && _hub.InSession;
     private string StatusLine => _hub?.StatusLine ?? string.Empty;
     public bool IsOpen => _open;
+    public TabletDevice? Device => _device;
+    public Control? Content => _content;
+    public Control? Root => _root;
     /// <summary>A key row in SETTINGS > CONTROLS is waiting for a key (Escape then means cancel the rebind).</summary>
     public bool IsCapturingKey => _settingsPanel != null && IsInstanceValid(_settingsPanel) && _settingsPanel.IsInsideTree() && _settingsPanel.IsCapturingKey;
 
@@ -52,6 +55,7 @@ public partial class HubTablet : CanvasLayer
     private bool _open;
     private bool _leaving;
     private string? _operatorPreview;
+    private long _activeMenuPeerId = -1;
 
     // chat
     private readonly List<(string Sender, int Team, string Text)> _log = new();
@@ -90,10 +94,13 @@ public partial class HubTablet : CanvasLayer
         BuildShell();
         if (!InGame)
         {
-            _hub = HubController.Instance!;
+            _hub = HubController.Instance;
             BuildChatFeed();
-            _hub.ChatReceived += OnChat;
-            _hub.RosterChanged += () => _lobbyDirty = true;
+            if (_hub != null)
+            {
+                _hub.ChatReceived += OnChat;
+                _hub.RosterChanged += () => _lobbyDirty = true;
+            }
             if (MatchManager.Instance != null) MatchManager.Instance.LobbyChanged += OnLobbyChanged;
         }
         AttachTabletModel();
@@ -143,6 +150,7 @@ public partial class HubTablet : CanvasLayer
     {
         if (!_open || _connectionLost) return; // with the host gone the only way out is LEAVE
         _confirmLeave = false;
+        _activeMenuPeerId = -1;
         _open = false;
         StopListening();
         GameUiState.SetMenuOpen(false);
@@ -164,6 +172,7 @@ public partial class HubTablet : CanvasLayer
         {
             if (@event is InputEventKey hot && hot.Pressed && !hot.Echo && !TypingOnScreen())
             {
+                if (hot.PhysicalKeycode == Key.Equal || hot.Keycode == Key.Equal) { MarkInputHandled(); Close(); return; }
                 if (hot.PhysicalKeycode == Key.Q) { MarkInputHandled(); CycleTab(-1); return; }
                 if (hot.PhysicalKeycode == Key.E) { MarkInputHandled(); CycleTab(1); return; }
                 if (hot.PhysicalKeycode == Key.Space) { MarkInputHandled(); PrimaryAction(); return; }
@@ -192,6 +201,12 @@ public partial class HubTablet : CanvasLayer
             {
                 MarkInputHandled();
                 BeginQuickChat();
+                return;
+            }
+            if (!_open && (key.PhysicalKeycode == Key.Equal || key.Keycode == Key.Equal) && !TypingOnScreen())
+            {
+                MarkInputHandled();
+                Open();
                 return;
             }
         }
@@ -256,7 +271,7 @@ public partial class HubTablet : CanvasLayer
         if (!Multiplayer.HasMultiplayerPeer()) return string.Empty;
         var sb = new StringBuilder();
         sb.Append(InSession).Append('|').Append(StatusLine).Append('|').Append(PlayerDirectory.Version).Append('|');
-        sb.Append(Multiplayer.GetPeers().Length).Append('|');
+        sb.Append(Multiplayer.GetPeers().Length).Append('|').Append(_activeMenuPeerId).Append('|');
         MatchManager? match = MatchManager.Instance;
         if (match == null) return sb.ToString();
         sb.Append((int)match.GameMode).Append('|').Append((int)match.SelectedMap).Append('|').Append(match.BotCount).Append('|');
@@ -287,7 +302,7 @@ public partial class HubTablet : CanvasLayer
     private bool RefreshLiveSection()
     {
         // Only the cheap-to-rebuild screens are rebuilt live.
-        if (_section == Section.Status || _section == Section.Home || (_section == Section.Play && InSession && _playStep == PlayStep.Home))
+        if (_section == Section.Status || _section == Section.Home || (_section == Section.Play && InSession))
         {
             ShowSection(_section);
             return true;
@@ -381,7 +396,12 @@ public partial class HubTablet : CanvasLayer
             viewport.SetInputAsHandled();
     }
 
-    private bool TypingOnScreen() => GetInputScreen()?.GuiGetFocusOwner() is LineEdit or TextEdit;
+    public bool TypingOnScreen()
+    {
+        if (GetInputScreen()?.GuiGetFocusOwner() is LineEdit or TextEdit) return true;
+        if (IsInsideTree() && GetViewport()?.GuiGetFocusOwner() is LineEdit or TextEdit) return true;
+        return false;
+    }
 
     private void SetOverlays(bool tabletUp)
     {
@@ -431,8 +451,8 @@ public partial class HubTablet : CanvasLayer
         return false;
     }
 
-    private static readonly Section[] TabOrder = { Section.Home, Section.Operator, Section.Status, Section.Chat, Section.Settings };
-    private static readonly Section[] GameTabOrder = { Section.Home, Section.Operator, Section.Settings };
+    private static readonly Section[] TabOrder = { Section.Play, Section.Loadout, Section.Operator, Section.Settings };
+    private static readonly Section[] GameTabOrder = { Section.Play, Section.Loadout, Section.Operator, Section.Settings };
 
     private static Button Sized(Button button, float width)
     {
@@ -528,13 +548,10 @@ public partial class HubTablet : CanvasLayer
         var tabs = new HBoxContainer { SizeFlagsVertical = Control.SizeFlags.ShrinkCenter };
         tabs.AddThemeConstantOverride("separation", 4);
         tabs.AddChild(KeyCap("Q"));
-        tabs.AddChild(Tab("HOME", Section.Home));
-        tabs.AddChild(Tab("OPERATOR", Section.Operator));
-        if (!InGame)
-        {
-            tabs.AddChild(Tab("PLAYERS", Section.Status));
-            tabs.AddChild(Tab("CHAT", Section.Chat));
-        }
+        tabs.AddChild(Tab("PLAY", Section.Play));
+        tabs.AddChild(Tab("LOADOUT", Section.Loadout));
+        tabs.AddChild(Tab("OPERATORS", Section.Operator));
+        tabs.AddChild(Tab("SETTINGS", Section.Settings));
         tabs.AddChild(KeyCap("E"));
         _topBar.AddChild(tabs);
 
@@ -578,6 +595,7 @@ public partial class HubTablet : CanvasLayer
         _scroll = null;
 
         _section = section;
+        if (section != Section.Play) _activeMenuPeerId = -1;
         StopListening();
         foreach (Node child in _content.GetChildren()) { _content.RemoveChild(child); child.QueueFree(); }
         BuildTopBar();
@@ -588,8 +606,12 @@ public partial class HubTablet : CanvasLayer
                 PlayHeader();
                 BuildPlay();
                 break;
+            case Section.Loadout:
+                PageHeader("LOADOUT", "3D gunsmith node configurator & 8-stat bars");
+                BuildLoadout();
+                break;
             case Section.Operator:
-                PageHeader("OPERATOR", "choose your character");
+                PageHeader("OPERATORS", "12-operator roster · 4-round role cap");
                 BuildOperator();
                 break;
             case Section.Status:
@@ -863,59 +885,178 @@ public partial class HubTablet : CanvasLayer
     // Match set-up controls (shared by PLAY and CUSTOM GAME)
     // -------------------------------------------------------------------------------------------
 
-    private static readonly int[] DurationChoices = { 3, 5, 10, 15 };
+    private static readonly int[] DurationChoices = { 3, 5, 8, 13 };
     /// <summary>Total players in a vs-bots match, counting you. All even, so the two teams always split cleanly.</summary>
-    private static readonly int[] PlayerChoices = { 6, 10, 12, 16 };
+    private static readonly int[] PlayerChoices = { 4, 6, 8, 10, 12, 14, 16, 18 };
     private static readonly string[] YesNo = { "No", "Yes" };
     private static readonly string[] BotLevelNames = { "Easy", "Normal", "Advanced", "Mixed" };
 
     private bool _hostBotsEnabled;
 
-    /// <summary>Drop-down for the match mode. A mode that is not on the list (left over from an earlier
-    /// session) is reset to Team Deathmatch so the drop-down always shows what will really be played.</summary>
+    /// <summary>Clean OptionButton drop-down for the match mode (Master GDD & prompt.md Bug 3).</summary>
     private static Control ModeDropdown(MatchManager match, Action onChanged)
     {
         List<MatchManager.Mode> modes = HubModes();
         if (!modes.Contains(match.GameMode)) match.GameMode = modes[0];
-        var options = new (string Title, string Detail)[modes.Count];
+
+        var box = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        box.AddThemeConstantOverride("separation", 4);
+        box.AddChild(MenuStyle.Text("Mode", 14, MenuStyle.TextDim, MenuStyle.SemiBold));
+
+        var opt = new OptionButton
+        {
+            CustomMinimumSize = new Vector2(0, 36),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            FocusMode = Control.FocusModeEnum.None,
+        };
         int selected = 0;
         for (int i = 0; i < modes.Count; i++)
         {
             GameModeBase rules = GameModeBase.For(modes[i]);
-            options[i] = (rules.DisplayName, rules.PlayerFormat);
+            opt.AddItem(rules.DisplayName, i);
             if (modes[i] == match.GameMode) selected = i;
         }
-        return MenuStyle.Dropdown("Mode", options, selected, index =>
+        opt.Selected = selected;
+        opt.AddThemeFontOverride("font", MenuStyle.SemiBold);
+        opt.AddThemeFontSizeOverride("font_size", 14);
+        opt.ItemSelected += index =>
         {
-            match.GameMode = modes[index];
+            match.GameMode = modes[(int)index];
             onChanged();
-        });
+        };
+        box.AddChild(opt);
+        return box;
     }
 
-    /// <summary>Drop-down for the arena map.</summary>
+    /// <summary>Clean OptionButton drop-down for the arena map.</summary>
     private static Control MapDropdown(MatchManager match, Action onChanged)
     {
         MatchManager.ArenaMap[] maps = MatchManager.SelectableMaps;
         if (System.Array.IndexOf(maps, match.SelectedMap) < 0) match.SelectedMap = maps[0];
-        var options = new (string Title, string Detail)[maps.Length];
+
+        var box = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        box.AddThemeConstantOverride("separation", 4);
+        box.AddChild(MenuStyle.Text("Map", 14, MenuStyle.TextDim, MenuStyle.SemiBold));
+
+        var opt = new OptionButton
+        {
+            CustomMinimumSize = new Vector2(0, 36),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            FocusMode = Control.FocusModeEnum.None,
+        };
         int selected = 0;
         for (int i = 0; i < maps.Length; i++)
         {
-            options[i] = (MatchManager.MapName(maps[i]), string.Empty);
+            opt.AddItem(MatchManager.MapName(maps[i]), i);
             if (maps[i] == match.SelectedMap) selected = i;
         }
-        return MenuStyle.Dropdown("Map", options, selected, index =>
+        opt.Selected = selected;
+        opt.AddThemeFontOverride("font", MenuStyle.SemiBold);
+        opt.AddThemeFontSizeOverride("font_size", 14);
+        opt.ItemSelected += index =>
         {
-            match.SelectedMap = maps[index];
+            match.SelectedMap = maps[(int)index];
             onChanged();
-        });
+        };
+        box.AddChild(opt);
+        return box;
+    }
+
+    private static Control MaxPlayersRow(MatchManager match, Action onChanged)
+    {
+        var box = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        box.AddThemeConstantOverride("separation", 4);
+
+        var labelRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var title = MenuStyle.Text("Max Players", 14, MenuStyle.TextDim, MenuStyle.SemiBold);
+        title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        labelRow.AddChild(title);
+        var countChip = MenuStyle.Chip($"{match.LobbyPlayerCount}", MenuStyle.Accent, 12, false);
+        labelRow.AddChild(countChip);
+        box.AddChild(labelRow);
+
+        var inputRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        inputRow.AddThemeConstantOverride("separation", 6);
+
+        var minusBtn = MenuStyle.Outline("-", () =>
+        {
+            int minP = match.ModeRules.MinimumPlayers;
+            if (match.LobbyPlayerCount > minP)
+            {
+                match.LobbyPlayerCount = Math.Max(minP, match.LobbyPlayerCount - 2);
+                onChanged();
+            }
+        }, null, 30);
+        minusBtn.CustomMinimumSize = new Vector2(32, 30);
+        inputRow.AddChild(minusBtn);
+
+        var lineEdit = new LineEdit
+        {
+            Text = match.LobbyPlayerCount.ToString(),
+            Alignment = HorizontalAlignment.Center,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(0, 30),
+            FocusMode = Control.FocusModeEnum.None,
+            Editable = false,
+        };
+        MenuStyle.StyleLineEdit(lineEdit);
+        inputRow.AddChild(lineEdit);
+
+        var plusBtn = MenuStyle.Outline("+", () =>
+        {
+            int maxP = match.ModeRules.MaximumPlayers;
+            if (match.LobbyPlayerCount < maxP)
+            {
+                match.LobbyPlayerCount = Math.Min(maxP, match.LobbyPlayerCount + 2);
+                onChanged();
+            }
+        }, null, 30);
+        plusBtn.CustomMinimumSize = new Vector2(32, 30);
+        inputRow.AddChild(plusBtn);
+
+        box.AddChild(inputRow);
+        return box;
+    }
+
+    private static Control BotDifficultySlider(MatchManager match, Action onChanged)
+    {
+        var box = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        box.AddThemeConstantOverride("separation", 4);
+
+        int currentLevel = Math.Clamp((int)match.BotLevel + 1, 1, 5);
+        var labelRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var title = MenuStyle.Text("Bots Difficulty", 14, MenuStyle.TextDim, MenuStyle.SemiBold);
+        title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        labelRow.AddChild(title);
+        var valLabel = MenuStyle.Text($"LEVEL {currentLevel}", 12, MenuStyle.Accent, MenuStyle.Bold);
+        labelRow.AddChild(valLabel);
+        box.AddChild(labelRow);
+
+        var slider = new HSlider
+        {
+            MinValue = 1,
+            MaxValue = 5,
+            Step = 1,
+            Value = currentLevel,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(0, 24),
+            FocusMode = Control.FocusModeEnum.None,
+        };
+        slider.ValueChanged += val =>
+        {
+            match.BotLevel = (BotDifficulty)Math.Clamp((int)val - 1, 0, 3);
+            valLabel.Text = $"LEVEL {(int)val}";
+            onChanged();
+        };
+        box.AddChild(slider);
+        return box;
     }
 
     /// <summary>How long the match runs. There is no score limit: the clock decides every match.</summary>
     private static Control DurationRow(MatchManager match, Action onChanged)
     {
         int selected = System.Array.IndexOf(DurationChoices, match.TimeLimitMinutes);
-        if (selected < 0) { match.TimeLimitMinutes = 10; selected = System.Array.IndexOf(DurationChoices, 10); }
+        if (selected < 0) { match.TimeLimitMinutes = 5; selected = System.Array.IndexOf(DurationChoices, 5); }
         var labels = new string[DurationChoices.Length];
         for (int i = 0; i < labels.Length; i++) labels[i] = $"{DurationChoices[i]}m";
         return MenuStyle.Segmented("Duration", labels, selected, index =>
@@ -1153,69 +1294,635 @@ public partial class HubTablet : CanvasLayer
         match.LobbyPlayerCount = Math.Clamp(humans + match.BotCount, match.ModeRules.MinimumPlayers, match.ModeRules.MaximumPlayers);
     }
 
+    public void BuildLobbyForTest(VBoxContainer column) => BuildLobby(column);
+    public void BuildJoinForTest()
+    {
+        _open = true;
+        _section = Section.Play;
+        _playStep = PlayStep.Join;
+        BuildJoin();
+    }
+    public VBoxContainer? GamesListForTest => _gamesList;
+
     private void BuildLobby(VBoxContainer column)
     {
         MatchManager match = MatchManager.Instance;
         GameModeBase rules = match.ModeRules;
-        bool host = Multiplayer.IsServer();
+        bool host = !Multiplayer.HasMultiplayerPeer() || Multiplayer.IsServer();
 
-        var about = MenuStyle.Panel(rules.DisplayName.ToUpperInvariant(), "crosshair", out VBoxContainer aboutBody);
-        string details = $"{rules.PlayerFormat}\nMap: {match.MapDisplayName}   |   Time: {match.TimeLimitMinutes} min";
-        if (match.IsTeamMode)
-            details += $"\nFriendly fire: {(match.FriendlyFire ? "On" : "Off")}   |   Player markers: {(match.TeamIndicators ? "On" : "Off")}";
-        aboutBody.AddChild(MenuStyle.Wrapped(details, 19, MenuStyle.TextDim));
-        if (HubController.SplitRooms(match))
-            aboutBody.AddChild(MenuStyle.Wrapped($"You are on {MatchManager.TeamName(match.GetTeam(Multiplayer.GetUniqueId()))}. Your team has its own warehouse: the other side cannot see or hear you until the match starts.", 17, MenuStyle.TextMuted));
-        column.AddChild(about);
+        // 3-Column Custom Game Lobby (Master GDD & prompt.md Bug 3):
+        // Col 1: Left Column (Host Configuration)
+        // Col 2: Center Column (Albert Team vs. Einstein Team / Attackers vs. Defenders)
+        // Col 3: Right Column (Social & Invites)
+        var layout = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        layout.AddThemeConstantOverride("separation", 14);
+        column.AddChild(layout);
 
-        if (host && _hostBotsEnabled)
+        var (alberts, einsteins, albertBots, einsteinBots) = GetLobbyRosters(match);
+        int capacity = Math.Max(5, Math.Max(alberts.Count + albertBots.Count, einsteins.Count + einsteinBots.Count));
+
+        // Column 1: Left Column (Host Configuration)
+        var leftCol = Column(10);
+        leftCol.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        BuildHostConfigColumn(leftCol, match, rules, host);
+        layout.AddChild(leftCol);
+
+        // Column 2: Center Column (Stacked Team Containers)
+        var centerCol = Column(10);
+        centerCol.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        BuildStackedTeamsColumn(centerCol, alberts, einsteins, albertBots, einsteinBots, capacity, host, match);
+        layout.AddChild(centerCol);
+
+        // Column 3: Right Column (Social & Invites)
+        var rightCol = Column(10);
+        rightCol.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        BuildSocialAndInvitesPanel(rightCol);
+        layout.AddChild(rightCol);
+    }
+
+    private (List<(long Id, string Name, bool IsMe, bool IsHost, bool IsReady)> Alberts,
+             List<(long Id, string Name, bool IsMe, bool IsHost, bool IsReady)> Einsteins,
+             List<string> AlbertBots,
+             List<string> EinsteinBots)
+    GetLobbyRosters(MatchManager match)
+    {
+        var alberts = new List<(long Id, string Name, bool IsMe, bool IsHost, bool IsReady)>();
+        var einsteins = new List<(long Id, string Name, bool IsMe, bool IsHost, bool IsReady)>();
+        var albertBots = new List<string>();
+        var einsteinBots = new List<string>();
+
+        long[] ids = match.LobbyPeerIds();
+        if (ids.Length == 0) ids = new long[] { LocalPeerId() };
+
+        long myId = LocalPeerId();
+        foreach (long id in ids)
         {
-            // Everything else was chosen when the lobby was created; with bots on, their number can still change here.
-            var settings = MenuStyle.Panel("BOTS", "bot", out VBoxContainer hostBody);
-            hostBody.AddChild(BotStepper(refresh: () => { match.BroadcastHostConfig(); ShowSection(Section.Play); }));
-            hostBody.AddChild(BotDifficultyRow(match, () => { match.BroadcastHostConfig(); ShowSection(Section.Play); }));
-            column.AddChild(settings);
+            string name = GameUiState.PlayerName(id);
+            bool isMe = id == myId;
+            bool isHost = id == 1;
+            bool isReady = id == 1 || match.IsPeerReady(id);
+            int team = match.GetTeam(id);
+            if (team < 0) team = (alberts.Count <= einsteins.Count) ? 0 : 1;
+
+            if (team == 0) alberts.Add((id, name, isMe, isHost, isReady));
+            else einsteins.Add((id, name, isMe, isHost, isReady));
         }
 
-        var players = MenuStyle.Panel("PLAYERS", "users", out VBoxContainer playersBody);
-        FillPlayerRows(playersBody);
-        column.AddChild(players);
+        for (int i = 0; i < match.BotCount; i++)
+        {
+            string botName = match.PlannedBotName(i);
+            int countA = alberts.Count + albertBots.Count;
+            int countE = einsteins.Count + einsteinBots.Count;
+            if (countA <= countE) albertBots.Add(botName);
+            else einsteinBots.Add(botName);
+        }
 
+        return (alberts, einsteins, albertBots, einsteinBots);
+    }
+
+    private void BuildTeamColumn(
+        VBoxContainer col,
+        int teamIndex,
+        string teamTitle,
+        Color teamAccent,
+        List<(long Id, string Name, bool IsMe, bool IsHost, bool IsReady)> humans,
+        List<string> bots,
+        int capacity,
+        bool isHost,
+        MatchManager match)
+    {
+        var panel = MenuStyle.Panel(teamTitle, "users", out VBoxContainer body);
+        panel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        col.AddChild(panel);
+
+        int memberCount = humans.Count + bots.Count;
+        var subHeader = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var titleLabel = MenuStyle.Text(teamTitle, 20, teamAccent, MenuStyle.Bold);
+        titleLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        subHeader.AddChild(titleLabel);
+        var countChip = MenuStyle.Chip($"{memberCount}/{capacity}", teamAccent, 13, false);
+        subHeader.AddChild(countChip);
+        body.AddChild(subHeader);
+
+        body.AddChild(new ColorRect { Color = teamAccent, CustomMinimumSize = new Vector2(0, 2), MouseFilter = Control.MouseFilterEnum.Ignore });
+
+        foreach (var p in humans)
+            body.AddChild(BuildPlayerRow(p.Id, p.Name, p.IsMe, p.IsHost, p.IsReady, teamIndex, isHost, match));
+
+        foreach (var b in bots)
+            body.AddChild(BuildBotRow(b, teamAccent));
+
+        for (int i = memberCount; i < capacity; i++)
+            body.AddChild(BuildEmptySlotRow());
+    }
+
+    private Control BuildPlayerRow(
+        long peerId,
+        string name,
+        bool isMe,
+        bool isPeerHost,
+        bool isReady,
+        int teamIndex,
+        bool isLocalHost,
+        MatchManager match)
+    {
+        var box = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        box.AddThemeConstantOverride("separation", 2);
+
+        var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var style = new StyleBoxFlat
+        {
+            BgColor = isMe ? new Color(0.18f, 0.14f, 0.08f, 0.9f) : new Color(0.08f, 0.09f, 0.11f, 0.85f),
+            BorderColor = isMe ? new Color(1.0f, 0.82f, 0.32f, 0.5f) : new Color(0.25f, 0.25f, 0.28f, 0.3f),
+        };
+        style.SetBorderWidthAll(1);
+        style.SetCornerRadiusAll(4);
+        style.ContentMarginLeft = 8;
+        style.ContentMarginRight = 8;
+        style.ContentMarginTop = 6;
+        style.ContentMarginBottom = 6;
+        card.AddThemeStyleboxOverride("panel", style);
+
+        var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        row.AddThemeConstantOverride("separation", 8);
+
+        row.AddChild(MenuStyle.Icon("user", 16, 16, isMe ? new Color(1.0f, 0.82f, 0.32f) : MenuStyle.TextDim));
+
+        // Rank badge
+        var rankBadge = MenuStyle.Chip("LVL 12", new Color(0.35f, 0.55f, 0.85f), 11, false);
+        row.AddChild(rankBadge);
+
+        // Host crown
+        if (isPeerHost)
+        {
+            var crown = MenuStyle.Text("👑", 14, new Color(1.0f, 0.82f, 0.2f), MenuStyle.Bold);
+            row.AddChild(crown);
+        }
+
+        string displayName = name + (isMe ? " (you)" : "");
+        var nameLabel = MenuStyle.Text(displayName, 15, isMe ? new Color(1.0f, 0.85f, 0.4f) : MenuStyle.TextMain, MenuStyle.SemiBold);
+        nameLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        nameLabel.ClipText = true;
+        row.AddChild(nameLabel);
+
+        var readyBadge = MenuStyle.Chip(
+            isReady ? "READY" : "WAITING",
+            isReady ? new Color(0.35f, 0.85f, 0.40f) : new Color(0.95f, 0.40f, 0.30f),
+            12,
+            false);
+        row.AddChild(readyBadge);
+
+        if (isLocalHost)
+        {
+            var dotsBtn = new Button
+            {
+                Text = "⋮",
+                Flat = true,
+                CustomMinimumSize = new Vector2(28, 26),
+                FocusMode = Control.FocusModeEnum.None,
+            };
+            dotsBtn.AddThemeFontOverride("font", MenuStyle.Bold);
+            dotsBtn.AddThemeFontSizeOverride("font_size", 16);
+            dotsBtn.AddThemeColorOverride("font_color", _activeMenuPeerId == peerId ? MenuStyle.Accent : MenuStyle.TextDim);
+            dotsBtn.AddThemeColorOverride("font_hover_color", MenuStyle.Accent);
+            dotsBtn.Pressed += () =>
+            {
+                _activeMenuPeerId = _activeMenuPeerId == peerId ? -1 : peerId;
+                ShowSection(Section.Play);
+            };
+            row.AddChild(dotsBtn);
+        }
+
+        card.AddChild(row);
+        box.AddChild(card);
+
+        // Host 3-dot menu drawer
+        if (isLocalHost && _activeMenuPeerId == peerId)
+        {
+            var menuDrawer = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var drawerStyle = new StyleBoxFlat
+            {
+                BgColor = new Color(0.12f, 0.05f, 0.06f, 0.95f),
+                BorderColor = MenuStyle.Accent,
+            };
+            drawerStyle.SetBorderWidthAll(1);
+            drawerStyle.SetCornerRadiusAll(4);
+            drawerStyle.ContentMarginLeft = 6;
+            drawerStyle.ContentMarginRight = 6;
+            drawerStyle.ContentMarginTop = 4;
+            drawerStyle.ContentMarginBottom = 4;
+            menuDrawer.AddThemeStyleboxOverride("panel", drawerStyle);
+
+            var actions = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            actions.AddThemeConstantOverride("separation", 6);
+
+            int targetTeam = teamIndex == 0 ? 1 : 0;
+            string switchLabel = targetTeam == 0 ? "⇄ Move to Albert" : "⇄ Move to Einstein";
+            var switchBtn = MenuStyle.Outline(switchLabel, () =>
+            {
+                match.SetPeerTeam(peerId, targetTeam);
+                _activeMenuPeerId = -1;
+                ShowSection(Section.Play);
+            }, null, 30);
+            switchBtn.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            switchBtn.AddThemeFontSizeOverride("font_size", 13);
+            actions.AddChild(switchBtn);
+
+            if (peerId != 1)
+            {
+                var kickBtn = MenuStyle.Outline("✕ Kick", () =>
+                {
+                    match.KickPlayer(peerId);
+                    _activeMenuPeerId = -1;
+                    ShowSection(Section.Play);
+                }, null, 30);
+                kickBtn.AddThemeFontSizeOverride("font_size", 13);
+                kickBtn.AddThemeColorOverride("font_color", new Color(1.0f, 0.35f, 0.35f));
+                actions.AddChild(kickBtn);
+            }
+
+            var closeBtn = new Button { Text = "✕", Flat = true, CustomMinimumSize = new Vector2(26, 26) };
+            closeBtn.Pressed += () =>
+            {
+                _activeMenuPeerId = -1;
+                ShowSection(Section.Play);
+            };
+            actions.AddChild(closeBtn);
+
+            menuDrawer.AddChild(actions);
+            box.AddChild(menuDrawer);
+        }
+
+        return box;
+    }
+
+    private static Control BuildBotRow(string botName, Color teamAccent)
+    {
+        var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var style = new StyleBoxFlat
+        {
+            BgColor = new Color(0.06f, 0.07f, 0.08f, 0.7f),
+            BorderColor = new Color(0.2f, 0.2f, 0.22f, 0.2f),
+        };
+        style.SetBorderWidthAll(1);
+        style.SetCornerRadiusAll(4);
+        style.ContentMarginLeft = 8;
+        style.ContentMarginRight = 8;
+        style.ContentMarginTop = 6;
+        style.ContentMarginBottom = 6;
+        card.AddThemeStyleboxOverride("panel", style);
+
+        var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        row.AddThemeConstantOverride("separation", 8);
+        row.AddChild(MenuStyle.Icon("bot", 16, 16, MenuStyle.TextMuted));
+        var nameLabel = MenuStyle.Text($"[BOT] {botName}", 15, MenuStyle.TextDim, MenuStyle.Medium);
+        nameLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        nameLabel.ClipText = true;
+        row.AddChild(nameLabel);
+        row.AddChild(MenuStyle.Chip("READY", new Color(0.35f, 0.85f, 0.40f, 0.8f), 11, false));
+        card.AddChild(row);
+        return card;
+    }
+
+    private static Control BuildEmptySlotRow()
+    {
+        var card = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var style = new StyleBoxFlat
+        {
+            BgColor = new Color(0.04f, 0.04f, 0.05f, 0.4f),
+            BorderColor = new Color(0.18f, 0.18f, 0.20f, 0.2f),
+        };
+        style.SetBorderWidthAll(1);
+        style.SetCornerRadiusAll(4);
+        style.ContentMarginLeft = 8;
+        style.ContentMarginRight = 8;
+        style.ContentMarginTop = 6;
+        style.ContentMarginBottom = 6;
+        card.AddThemeStyleboxOverride("panel", style);
+
+        var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        row.Alignment = BoxContainer.AlignmentMode.Center;
+        row.AddChild(MenuStyle.Text("- Open Slot -", 14, MenuStyle.TextMuted, MenuStyle.Medium));
+        card.AddChild(row);
+        return card;
+    }
+
+    private void BuildHostConfigColumn(VBoxContainer col, MatchManager match, GameModeBase rules, bool host)
+    {
+        var configPanel = MenuStyle.Panel("HOST CONFIGURATION", "crosshair", out VBoxContainer body);
+        body.AddThemeConstantOverride("separation", 8);
+        col.AddChild(configPanel);
+
+        // Header banner with START MATCH button (or READY for clients)
         string need = ReadyBlocker(match);
         if (host)
         {
-            Button start = MenuStyle.Primary("START GAME", new Vector2(340, 70), () => _hub?.StartMatch());
+            Button start = MenuStyle.Primary("START MATCH", new Vector2(0, 50), () => _hub?.StartMatch());
+            start.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
             start.Disabled = !match.CanHostStartMatch;
-            column.AddChild(start);
-            column.AddChild(MenuStyle.Text(need.Length == 0 ? "Everyone is ready." : need, 17, need.Length == 0 ? MenuStyle.TextDim : MenuStyle.Accent, MenuStyle.SemiBold));
+            body.AddChild(start);
+
+            string statusMsg = need.Length == 0 ? "Everyone is ready!" : need;
+            Color statusColor = need.Length == 0 ? new Color(0.35f, 0.85f, 0.4f) : MenuStyle.Accent;
+            body.AddChild(MenuStyle.Text(statusMsg, 13, statusColor, MenuStyle.SemiBold, HorizontalAlignment.Center));
         }
         else
         {
             bool ready = match.LocalPlayerReady;
-            column.AddChild(MenuStyle.Primary(ready ? "NOT READY" : "READY", new Vector2(340, 70), () =>
+            Button readyBtn = MenuStyle.Primary(ready ? "NOT READY" : "READY", new Vector2(0, 50), () =>
             {
                 match.SetLocalReady(!ready);
-                // the host's reply refreshes this screen; flip it right away so the click feels instant
                 CallDeferred(nameof(RefreshLiveSectionDeferred));
-            }));
-            column.AddChild(MenuStyle.Text(ready ? "You are ready. Waiting for the host." : "Pick your weapons at the wall, then press READY.", 17, MenuStyle.TextDim, MenuStyle.SemiBold));
+            });
+            readyBtn.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            body.AddChild(readyBtn);
+
+            body.AddChild(MenuStyle.Text(
+                ready ? "You are READY. Waiting for host to start..." : "Press READY when prepared.",
+                13,
+                MenuStyle.TextDim,
+                MenuStyle.SemiBold,
+                HorizontalAlignment.Center));
         }
+
+        body.AddChild(new ColorRect { Color = new Color(0.25f, 0.28f, 0.32f, 0.4f), CustomMinimumSize = new Vector2(0, 1), MouseFilter = Control.MouseFilterEnum.Ignore });
+
+        if (host)
+        {
+            // Mode & Map OptionButtons
+            body.AddChild(ModeDropdown(match, () =>
+            {
+                match.BroadcastHostConfig();
+                ShowSection(Section.Play);
+            }));
+
+            body.AddChild(MapDropdown(match, () =>
+            {
+                match.BroadcastHostConfig();
+                ShowSection(Section.Play);
+            }));
+
+            // Duration pills (3m, 5m, 8m, 13m)
+            body.AddChild(DurationRow(match, () =>
+            {
+                match.BroadcastHostConfig();
+                ShowSection(Section.Play);
+            }));
+
+            // Max Players input
+            body.AddChild(MaxPlayersRow(match, () =>
+            {
+                match.BroadcastHostConfig();
+                ShowSection(Section.Play);
+            }));
+
+            // Player Marker toggle (No / Yes)
+            body.AddChild(YesNoRow("Player Markers", match.TeamIndicators, v => match.TeamIndicators = v, () =>
+            {
+                match.BroadcastHostConfig();
+                ShowSection(Section.Play);
+            }));
+
+            // Friendly Fire toggle (No / Yes)
+            if (match.IsTeamMode)
+            {
+                body.AddChild(YesNoRow("Friendly Fire", match.FriendlyFire, v => match.FriendlyFire = v, () =>
+                {
+                    match.BroadcastHostConfig();
+                    ShowSection(Section.Play);
+                }));
+            }
+
+            // Enable Bots toggle (No / Yes)
+            body.AddChild(YesNoRow("Enable Bots", match.BotCount > 0, v =>
+            {
+                match.BotCount = v ? (match.BotCount > 0 ? match.BotCount : 2) : 0;
+                SyncLobbySize();
+            }, () =>
+            {
+                match.BroadcastHostConfig();
+                ShowSection(Section.Play);
+            }));
+
+            // Bots Difficulty slider (1-5) & Bot Toggles (1-5)
+            var botsPanel = MenuStyle.Panel("BOT TOGGLES (1–5)", "bot", out VBoxContainer botsBody);
+            botsBody.AddThemeConstantOverride("separation", 6);
+            body.AddChild(botsPanel);
+
+            botsBody.AddChild(BotDifficultySlider(match, () =>
+            {
+                match.BroadcastHostConfig();
+                ShowSection(Section.Play);
+            }));
+
+            var toggleRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            toggleRow.AddThemeConstantOverride("separation", 4);
+
+            bool isZero = match.BotCount == 0;
+            toggleRow.AddChild(CreateBotToggleBtn("OFF", isZero, host, () =>
+            {
+                match.BotCount = 0;
+                SyncLobbySize();
+                match.BroadcastHostConfig();
+                ShowSection(Section.Play);
+            }));
+
+            for (int b = 1; b <= 5; b++)
+            {
+                int botNum = b;
+                bool isActive = match.BotCount == botNum;
+                toggleRow.AddChild(CreateBotToggleBtn(botNum.ToString(), isActive, host, () =>
+                {
+                    match.BotCount = match.BotCount == botNum ? 0 : botNum;
+                    SyncLobbySize();
+                    match.BroadcastHostConfig();
+                    ShowSection(Section.Play);
+                }));
+            }
+            botsBody.AddChild(toggleRow);
+        }
+        else
+        {
+            body.AddChild(MenuStyle.Text($"Mode: {rules.DisplayName}", 14, MenuStyle.TextMain, MenuStyle.SemiBold));
+            body.AddChild(MenuStyle.Text($"Map: {match.MapDisplayName}", 14, MenuStyle.TextDim));
+            body.AddChild(MenuStyle.Text($"Duration: {match.TimeLimitMinutes}m", 14, MenuStyle.TextDim));
+            body.AddChild(MenuStyle.Text($"Max Players: {match.LobbyPlayerCount}", 14, MenuStyle.TextDim));
+            body.AddChild(MenuStyle.Text($"Bots: {(match.BotCount > 0 ? $"{match.BotCount} active" : "Disabled")}", 14, MenuStyle.TextDim));
+        }
+    }
+
+    private void BuildStackedTeamsColumn(
+        VBoxContainer col,
+        List<(long Id, string Name, bool IsMe, bool IsHost, bool IsReady)> alberts,
+        List<(long Id, string Name, bool IsMe, bool IsHost, bool IsReady)> einsteins,
+        List<string> albertBots,
+        List<string> einsteinBots,
+        int capacity,
+        bool isHost,
+        MatchManager match)
+    {
+        bool isConvoy = match.GameMode == MatchManager.Mode.ConvoyAssault;
+        string team0Title = isConvoy ? "ATTACKERS" : "TEAM ALBERT";
+        string team1Title = isConvoy ? "DEFENDERS" : "TEAM EINSTEIN";
+
+        BuildTeamColumn(col, 0, team0Title, MatchManager.TeamColor(0), alberts, albertBots, capacity, isHost, match);
+        BuildTeamColumn(col, 1, team1Title, MatchManager.TeamColor(1), einsteins, einsteinBots, capacity, isHost, match);
+    }
+
+    private void BuildSocialAndInvitesPanel(VBoxContainer col)
+    {
+        var panel = MenuStyle.Panel("SOCIAL & INVITES", "users", out VBoxContainer body);
+        body.AddThemeConstantOverride("separation", 8);
+        col.AddChild(panel);
+
+        // Discovered player invite list
+        var inviteHeader = new HBoxContainer();
+        inviteHeader.AddChild(MenuStyle.Text("DISCOVERED CREWS", 14, MenuStyle.Accent, MenuStyle.Bold));
+        body.AddChild(inviteHeader);
+
+        var discoveredBox = new VBoxContainer();
+        discoveredBox.AddThemeConstantOverride("separation", 4);
+        body.AddChild(discoveredBox);
+
+        bool hasDiscovered = false;
+        foreach (var session in LanMenu.DiscoveredSessions.Values)
+        {
+            hasDiscovered = true;
+            var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            row.AddThemeConstantOverride("separation", 6);
+            var nameLbl = MenuStyle.Text(session.Name, 13, MenuStyle.TextMain, MenuStyle.SemiBold);
+            nameLbl.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            row.AddChild(nameLbl);
+
+            var inviteBtn = MenuStyle.Outline("Invite to lobby", () =>
+            {
+                AddLog("SYSTEM", -1, $"Invite sent to {session.Name}");
+            }, null, 24);
+            inviteBtn.AddThemeFontSizeOverride("font_size", 11);
+            row.AddChild(inviteBtn);
+            discoveredBox.AddChild(row);
+        }
+
+        if (!hasDiscovered)
+        {
+            var emptyRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var emptyLbl = MenuStyle.Text("Scanning for nearby crews...", 13, MenuStyle.TextMuted, MenuStyle.Medium);
+            emptyLbl.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            emptyRow.AddChild(emptyLbl);
+
+            var inviteBtn = MenuStyle.Outline("Invite to lobby", () =>
+            {
+                AddLog("SYSTEM", -1, "Broadcast invite sent to nearby crews.");
+            }, null, 24);
+            inviteBtn.AddThemeFontSizeOverride("font_size", 11);
+            emptyRow.AddChild(inviteBtn);
+            discoveredBox.AddChild(emptyRow);
+        }
+
+        // Lobby chat box with "Send message..." input bar
+        var chatHeader = new HBoxContainer();
+        chatHeader.AddChild(MenuStyle.Text("LOBBY CHAT", 14, MenuStyle.Accent, MenuStyle.Bold));
+        body.AddChild(chatHeader);
+
+        var chatBox = new PanelContainer { CustomMinimumSize = new Vector2(0, 70), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var chatStyle = new StyleBoxFlat
+        {
+            BgColor = new Color(0.04f, 0.05f, 0.06f, 0.8f),
+            BorderColor = new Color(0.2f, 0.22f, 0.25f, 0.5f),
+        };
+        chatStyle.SetBorderWidthAll(1);
+        chatStyle.SetCornerRadiusAll(4);
+        chatStyle.ContentMarginLeft = 6;
+        chatStyle.ContentMarginRight = 6;
+        chatStyle.ContentMarginTop = 4;
+        chatStyle.ContentMarginBottom = 4;
+        chatBox.AddThemeStyleboxOverride("panel", chatStyle);
+
+        var chatScroll = new ScrollContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        var chatMessages = new VBoxContainer();
+        chatMessages.AddChild(MenuStyle.Text("Lobby chat ready. Press Enter or type below:", 12, MenuStyle.TextMuted, MenuStyle.Medium));
+        chatScroll.AddChild(chatMessages);
+        chatBox.AddChild(chatScroll);
+        body.AddChild(chatBox);
+
+        var chatInputRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        chatInputRow.AddThemeConstantOverride("separation", 6);
+        var chatInput = new LineEdit
+        {
+            PlaceholderText = "Send message...",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(0, 32),
+            MaxLength = 140,
+        };
+        MenuStyle.StyleLineEdit(chatInput);
+        chatInput.TextSubmitted += text =>
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            _hub?.SendChat(text.Trim());
+            chatInput.Text = string.Empty;
+        };
+        chatInputRow.AddChild(chatInput);
+
+        var sendBtn = MenuStyle.Primary("Send", new Vector2(50, 32), () =>
+        {
+            if (string.IsNullOrWhiteSpace(chatInput.Text)) return;
+            _hub?.SendChat(chatInput.Text.Trim());
+            chatInput.Text = string.Empty;
+        });
+        chatInputRow.AddChild(sendBtn);
+        body.AddChild(chatInputRow);
+    }
+
+    private static Button CreateBotToggleBtn(string label, bool active, bool enabled, Action onPressed)
+    {
+        var btn = new Button
+        {
+            Text = label,
+            CustomMinimumSize = new Vector2(0, 34),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            FocusMode = Control.FocusModeEnum.None,
+            Disabled = !enabled,
+        };
+        btn.AddThemeFontOverride("font", MenuStyle.Bold);
+        btn.AddThemeFontSizeOverride("font_size", 14);
+
+        var style = new StyleBoxFlat
+        {
+            BgColor = active ? MenuStyle.Accent : new Color(0.12f, 0.13f, 0.15f),
+            BorderColor = active ? MenuStyle.BorderHot : MenuStyle.Hairline,
+        };
+        style.SetBorderWidthAll(1);
+        style.SetCornerRadiusAll(4);
+        btn.AddThemeStyleboxOverride("normal", style);
+        btn.AddThemeStyleboxOverride("hover", style);
+        btn.AddThemeStyleboxOverride("pressed", style);
+        btn.AddThemeStyleboxOverride("disabled", style);
+
+        btn.AddThemeColorOverride("font_color", active ? Colors.White : MenuStyle.TextDim);
+        btn.AddThemeColorOverride("font_hover_color", Colors.White);
+        btn.AddThemeColorOverride("font_disabled_color", active ? Colors.White : MenuStyle.TextMuted);
+
+        if (enabled) btn.Pressed += onPressed;
+        return btn;
     }
 
     private void RefreshLiveSectionDeferred() { if (_open) ShowSection(_section); }
 
     private string ReadyBlocker(MatchManager match)
     {
-        if (!Multiplayer.IsServer()) return string.Empty;
-        int humans = Multiplayer.GetPeers().Length + 1;
+        if (Multiplayer.HasMultiplayerPeer() && !Multiplayer.IsServer()) return string.Empty;
+        int humans = Multiplayer.HasMultiplayerPeer() ? Multiplayer.GetPeers().Length + 1 : 1;
         if (humans + match.BotCount < match.ModeRules.MinimumPlayers)
             return $"Needs {match.ModeRules.MinimumPlayers} players: wait for friends or add bots.";
-        foreach (int peer in Multiplayer.GetPeers())
-            if (!match.IsPeerReady(peer)) return $"{GameUiState.PlayerName(peer)} is not ready.";
+        if (Multiplayer.HasMultiplayerPeer())
+        {
+            foreach (int peer in Multiplayer.GetPeers())
+                if (!match.IsPeerReady(peer)) return $"{GameUiState.PlayerName(peer)} is not ready.";
+        }
         return string.Empty;
     }
 
-    // ---- JOIN ---------------------------------------------------------------------------------
+    // ---- JOIN (Connected to LanMenu automatic hotspot session detection) ----------------------
 
     private void BuildJoin()
     {
@@ -1224,11 +1931,13 @@ public partial class HubTablet : CanvasLayer
         column.AddThemeConstantOverride("separation", 12);
         _content.AddChild(column);
 
-        var panel = MenuStyle.Panel("LAN GAMES", "wifi", out VBoxContainer body);
+        var panel = MenuStyle.Panel("CUSTOM GAME DISCOVERY", "wifi", out VBoxContainer body);
         panel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         column.AddChild(panel);
-        _joinStatus = MenuStyle.Text("Listening for games on this Wi-Fi...", 17, MenuStyle.TextDim, MenuStyle.Medium);
+
+        _joinStatus = MenuStyle.Text("Searching for Wi-Fi and mobile hotspot games...", 17, MenuStyle.TextDim, MenuStyle.Medium);
         body.AddChild(_joinStatus);
+
         var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         body.AddChild(scroll);
         _gamesList = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
@@ -1237,7 +1946,7 @@ public partial class HubTablet : CanvasLayer
 
         var manual = new HBoxContainer();
         manual.AddThemeConstantOverride("separation", 10);
-        var address = new LineEdit { PlaceholderText = "or type the host's IP address", Text = _manualAddress, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var address = new LineEdit { PlaceholderText = "or type the host's IP address (e.g. 192.168.43.1)", Text = _manualAddress, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         MenuStyle.StyleLineEdit(address);
         address.TextChanged += text => _manualAddress = text;
         manual.AddChild(address);
@@ -1251,68 +1960,89 @@ public partial class HubTablet : CanvasLayer
     private void StartListening()
     {
         StopListening();
-        _games.Clear();
-        _listener = new PacketPeerUdp();
-        Error error = _listener.Bind(LanSession.DiscoveryPort, "0.0.0.0");
-        if (error != Error.Ok)
-        {
-            if (_joinStatus != null) _joinStatus.Text = $"Discovery unavailable ({error}). Type the host's IP instead.";
-            _listener = null;
-        }
+        LanMenu.HotspotSessionsUpdated += OnHotspotSessionsUpdated;
+        LanMenu.StartHotspotDiscovery();
     }
 
     private void StopListening()
     {
-        _listener?.Close();
-        _listener = null;
+        LanMenu.HotspotSessionsUpdated -= OnHotspotSessionsUpdated;
+        LanMenu.StopHotspotDiscovery();
+    }
+
+    private void OnHotspotSessionsUpdated()
+    {
+        CallDeferred(nameof(RefreshGamesDeferred));
+    }
+
+    private void RefreshGamesDeferred()
+    {
+        if (_open && _section == Section.Play && _playStep == PlayStep.Join) RefreshGames();
     }
 
     private void PollDiscovery(double delta)
     {
-        _pollTimer += delta;
-        if (_pollTimer < 0.5 || _listener == null) return;
-        _pollTimer = 0;
-        bool changed = false;
-        while (_listener.GetAvailablePacketCount() > 0)
-        {
-            Variant parsed = Json.ParseString(Encoding.UTF8.GetString(_listener.GetPacket()));
-            if (parsed.VariantType != Variant.Type.Dictionary) continue;
-            var packet = parsed.AsGodotDictionary();
-            string advertised = packet.GetValueOrDefault("host", "").AsString();
-            string source = _listener.GetPacketIP();
-            string host = string.IsNullOrWhiteSpace(source) ? advertised : source;
-            if (string.IsNullOrEmpty(host)) continue;
-            string session = packet.GetValueOrDefault("session", host).AsString();
-            int port = (int)packet.GetValueOrDefault("port", LanSession.GamePort).AsInt64();
-            var entry = (
-                packet.GetValueOrDefault("name", "Wraith Run").AsString(), host, port,
-                (int)packet.GetValueOrDefault("players", 1).AsInt64(),
-                packet.GetValueOrDefault("map", "").AsString(), packet.GetValueOrDefault("mode", "").AsString(),
-                Time.GetTicksMsec());
-            if (!_games.TryGetValue(session, out var prior) || prior.Name != entry.Item1 || prior.Port != entry.Item3 || prior.Players != entry.Item4 || prior.Map != entry.Item5) changed = true;
-            _games[session] = entry;
-        }
-        foreach (string key in new List<string>(_games.Keys))
-            if (Time.GetTicksMsec() - _games[key].Seen > 3000) { _games.Remove(key); changed = true; }
-        if (changed) RefreshGames();
+        LanMenu.PollHotspotDiscovery(delta);
     }
 
     private void RefreshGames()
     {
         if (_gamesList == null || !IsInstanceValid(_gamesList)) return;
         foreach (Node child in _gamesList.GetChildren()) { _gamesList.RemoveChild(child); child.QueueFree(); }
-        if (_joinStatus != null) _joinStatus.Text = _games.Count == 0 ? "Listening for games on this Wi-Fi..." : $"{_games.Count} game(s) found";
-        foreach (var game in _games.Values)
+
+        var sessions = LanMenu.DiscoveredSessions.Values;
+        int count = LanMenu.DiscoveredSessions.Count;
+        if (_joinStatus != null)
+            _joinStatus.Text = count == 0 ? "Listening for games on Wi-Fi and mobile hotspot..." : $"{count} game(s) detected.";
+
+        // Highlight hotspot session if detected
+        foreach (var game in sessions)
+        {
+            if (game.IsHotspot)
+            {
+                var alert = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                var alertStyle = new StyleBoxFlat
+                {
+                    BgColor = new Color(0.15f, 0.10f, 0.02f, 0.9f),
+                    BorderColor = new Color(1.0f, 0.75f, 0.2f),
+                };
+                alertStyle.SetBorderWidthAll(1);
+                alertStyle.SetCornerRadiusAll(4);
+                alertStyle.ContentMarginLeft = 12;
+                alertStyle.ContentMarginRight = 12;
+                alertStyle.ContentMarginTop = 8;
+                alertStyle.ContentMarginBottom = 8;
+                alert.AddThemeStyleboxOverride("panel", alertStyle);
+
+                var aRow = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                aRow.AddThemeConstantOverride("separation", 12);
+                aRow.AddChild(MenuStyle.Icon("wifi", 22, 22, new Color(1.0f, 0.75f, 0.2f)));
+
+                var textCol = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                textCol.AddThemeConstantOverride("separation", -2);
+                textCol.AddChild(MenuStyle.Text("HOTSPOT SESSION DETECTED", 16, new Color(1.0f, 0.75f, 0.2f), MenuStyle.Bold));
+                textCol.AddChild(MenuStyle.Text($"{game.Name}  ·  {game.Mode}  ·  {game.Host}:{game.Port}", 14, MenuStyle.TextDim));
+                aRow.AddChild(textCol);
+
+                aRow.AddChild(MenuStyle.Primary("CONNECT", new Vector2(130, 36), () => JoinGame(game.Host, game.Port)));
+                alert.AddChild(aRow);
+                _gamesList.AddChild(alert);
+            }
+        }
+
+        foreach (var game in sessions)
         {
             string host = game.Host;
             int port = game.Port;
             string portSuffix = port != LanSession.GamePort ? $":{port}" : "";
-            _gamesList.AddChild(MenuStyle.Row(game.Name, $"{game.Mode}  |  {game.Map}  |  {host}{portSuffix}  |  {game.Players} in room", () => JoinGame(host, port)));
+            string hotspotTag = game.IsHotspot ? " [HOTSPOT]" : "";
+            _gamesList.AddChild(MenuStyle.Row(game.Name + hotspotTag, $"{game.Mode}  |  {game.Map}  |  {host}{portSuffix}  |  {game.Players} in room", () => JoinGame(host, port)));
         }
     }
 
     private void JoinGame(string address, int port = LanSession.GamePort)
     {
+        _playStep = PlayStep.Home;
         if (_hub != null && _hub.JoinSession(address, port))
         {
             if (_joinStatus != null) _joinStatus.Text = $"Connecting to {address}...";
@@ -1325,24 +2055,24 @@ public partial class HubTablet : CanvasLayer
     // OPERATOR / STATUS / CHAT
     // -------------------------------------------------------------------------------------------
 
+    private void BuildLoadout()
+    {
+        var loadoutScene = ResourceLoader.Load<PackedScene>("res://scenes/ui/LoadoutAttachmentTab.tscn");
+        Control loadoutView = loadoutScene != null ? loadoutScene.Instantiate<Control>() : new LoadoutAttachmentTab();
+        loadoutView.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        loadoutView.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        _content.AddChild(ContentFrame(loadoutView));
+    }
+
     private void BuildOperator()
     {
         var host = new Control { ClipContents = true };
         ContentFrame(host);
         _content.AddChild(host);
-        // These two screens were drawn for a full window; ask them to fit the tablet's glass instead.
-        LoadoutLayout.Compact = true;
-        try
-        {
-            new OperatorScreen(_operatorPreview, id =>
-            {
-                foreach (Node child in host.GetChildren()) { host.RemoveChild(child); child.QueueFree(); }
-                LoadoutLayout.Compact = true;
-                try { new CustomizeScreen(id).Build(host); }
-                finally { LoadoutLayout.Compact = false; }
-            }).Build(host);
-        }
-        finally { LoadoutLayout.Compact = false; }
+
+        var siegeSelect = new SiegeOperatorSelect();
+        siegeSelect.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        host.AddChild(siegeSelect);
     }
 
     private void BuildStatus(VBoxContainer column)
@@ -1419,10 +2149,7 @@ public partial class HubTablet : CanvasLayer
         MenuStyle.Place(_quickChat, 0, 1, 0, 1, 24, -56, 560, -16);
         feedRoot.AddChild(_quickChat);
 
-        var hint = MenuStyle.Text("ESC  tablet     ENTER  chat     E  weapon wall", 14, MenuStyle.TextMuted, MenuStyle.SemiBold);
-        MenuStyle.Place(hint, 0.5f, 1, 0.5f, 1, -200, -34, 200, -10);
-        hint.HorizontalAlignment = HorizontalAlignment.Center;
-        feedRoot.AddChild(hint);
+
     }
 
     private void BeginQuickChat()

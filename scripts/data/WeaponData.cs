@@ -118,4 +118,46 @@ public partial class WeaponData : Resource
 	/// <summary>Whether impact sounds vary by surface (metal/wood/glass/wall). Explosive weapons
 	/// can set this false so their explosion sound is never swapped out. Not read by any code yet.</summary>
 	[Export] public bool ImpactUsesSurfaceVariation { get; set; } = true;
+
+	// --- gunsmith / attachments -------------------------------------------------------------
+	[Export] public Godot.Collections.Array<AttachmentData> Attachments { get; set; } = new();
+	[Export] public StatModifier[] Modifiers { get; set; } = Array.Empty<StatModifier>();
+
+	/// <summary>Calculates stat modifiers configured directly on this weapon or via its equipped attachments.</summary>
+	public float GetModifier(string effectId, float defaultValue)
+	{
+		bool isMult = effectId.EndsWith("Mult");
+		bool found = false;
+		float total = isMult ? 1.0f : 0.0f;
+		if (Modifiers != null)
+		{
+			foreach (var mod in Modifiers)
+			{
+				if (mod != null && mod.EffectId == effectId)
+				{
+					if (isMult) total *= mod.Value;
+					else total += mod.Value;
+					found = true;
+				}
+			}
+		}
+		if (Attachments != null)
+		{
+			foreach (var att in Attachments)
+			{
+				if (att?.Modifiers == null) continue;
+				foreach (var mod in att.Modifiers)
+				{
+					if (mod != null && mod.EffectId == effectId)
+					{
+						if (isMult) total *= mod.Value;
+						else total += mod.Value;
+						found = true;
+					}
+				}
+			}
+		}
+		return found ? total : defaultValue;
+	}
 }
+

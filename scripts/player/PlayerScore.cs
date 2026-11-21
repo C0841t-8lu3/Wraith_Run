@@ -67,8 +67,37 @@ public partial class PlayerScore : Node
         _hasPriorKill = true;
         Kills++;
 
-        if (multiKill) EmitSignal(SignalName.MultiKillAwarded, KillStyleBonus.MultiKillBonus);
-        AwardPoints(totalPoints + (multiKill ? KillStyleBonus.MultiKillBonus : 0), "kill");
+        MatchManager? match = MatchManager.Instance;
+        bool usesUniversalStyles = match?.ModeRules?.UsesUniversalKillStyles ?? true;
+        int multiKillBonus = (multiKill && usesUniversalStyles) ? KillStyleBonus.MultiKillBonus : 0;
+
+        if (multiKill && usesUniversalStyles) EmitSignal(SignalName.MultiKillAwarded, KillStyleBonus.MultiKillBonus);
+        AwardPoints(totalPoints + multiKillBonus, "kill");
+    }
+
+    /// <summary>Awards objective or role points directly to this player's match score.</summary>
+    public void AwardDirectPoints(int points, string source)
+    {
+        if (points <= 0) return;
+
+        if (Multiplayer.HasMultiplayerPeer() && !PlayerIdentity.HasAuthority(this))
+        {
+            long auth = GetMultiplayerAuthority();
+            if (auth > 0)
+            {
+                RpcId(auth, MethodName.RpcAwardDirectPoints, points, source);
+                return;
+            }
+        }
+
+        AwardPoints(points, source);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RpcAwardDirectPoints(int points, string source)
+    {
+        if (!PlayerIdentity.HasAuthority(this)) return;
+        AwardPoints(points, source);
     }
 
     private void AwardPoints(int points, string source)

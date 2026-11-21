@@ -18,7 +18,10 @@ public partial class RenderAllViewModels : Node
 			"Sniper",
 			"Glock 19",
 			"FN 502",
-			"Desert Eagle"
+			"Desert Eagle",
+			"Sledge Hammer",
+			"Karambit",
+			"Bazooka"
 		};
 
 		var viewport = GetViewport();
@@ -64,10 +67,13 @@ public partial class RenderAllViewModels : Node
 				await ToSignal(GetTree(), "process_frame");
 			}
 
-			Image img = viewport.GetTexture().GetImage();
-			string savePath = $"/home/aauel/Documents/Projects/Games/wraith_run_godot/scripts/tests/{tresName}_render.png";
-			img.SavePng(savePath);
-			GD.Print($"Saved render for {weapon} -> {savePath}");
+			Image? img = viewport.GetTexture()?.GetImage();
+			if (img != null)
+			{
+				string savePath = $"/home/aauel/Documents/Projects/Games/wraith_run_godot/scripts/tests/{tresName}_render.png";
+				img.SavePng(savePath);
+				GD.Print($"Saved render for {weapon} -> {savePath}");
+			}
 
 			if (data.HasScope || data.AimPositionOffset != Vector3.Zero || weapon == "Sniper")
 			{
@@ -77,10 +83,13 @@ public partial class RenderAllViewModels : Node
 					vm._Process(0.016);
 					await ToSignal(GetTree(), "process_frame");
 				}
-				Image adsImg = viewport.GetTexture().GetImage();
-				string adsPath = $"/home/aauel/Documents/Projects/Games/wraith_run_godot/scripts/tests/{tresName}_ads_render.png";
-				adsImg.SavePng(adsPath);
-				GD.Print($"Saved ADS render for {weapon} -> {adsPath}");
+				Image? adsImg = viewport.GetTexture()?.GetImage();
+				if (adsImg != null)
+				{
+					string adsPath = $"/home/aauel/Documents/Projects/Games/wraith_run_godot/scripts/tests/{tresName}_ads_render.png";
+					adsImg.SavePng(adsPath);
+					GD.Print($"Saved ADS render for {weapon} -> {adsPath}");
+				}
 			}
 
 			camera.RemoveChild(vm);

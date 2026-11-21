@@ -49,11 +49,10 @@ public partial class WeaponSwitcher : Node
 	private const float FlyByMinShooterDistance = 2.5f;
 	private const float FlyByMinImpactDistance = 1.5f;
 
-	// Internal rather than private: controls read the list length instead of hardcoding indices.
+	// Exact 10-weapon table from Master GDD Section 4.2
 	internal static readonly string[] Loadout =
-		{ "AK-47", "M4", "P90", "Kriss Vector", "Glock 19", "Desert Eagle", "FN 502", "Shotgun",
-		  "", "", "Sniper" };
-	// Empty entries preserve replicated indices while those weapons are out of the game.
+		{ "AK-47", "M4", "P90", "Kriss Vector", "Glock 19", "FN 502", "Desert Eagle", "Shotgun",
+		  "Karambit", "Bazooka" };
 
 	private static readonly string[] HitMarkerSounds =
 	{
@@ -85,6 +84,8 @@ public partial class WeaponSwitcher : Node
 	private const bool KeepAmmoPerWeapon = true;
 
 	private WeaponData? _currentWeapon;
+	public WeaponData? CurrentWeapon => _currentWeapon;
+	public string CurrentWeaponName => _currentWeapon?.WeaponName ?? "Primary";
 	private int _currentAmmo;
 	private int _currentReserve;
 	private float _cooldownRemaining;
@@ -125,11 +126,255 @@ public partial class WeaponSwitcher : Node
 	}
 	private int _replicatedWeaponIndex;
 
+	// Dynamic attachment modifiers (e.g. from Gunsmith configuration)
+	private readonly System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<StatModifier>> _dynamicAttachmentModifiers = new();
+
+	public void SetAttachmentModifier(string weaponName, string effectId, float value)
+	{
+		if (string.IsNullOrEmpty(weaponName) || string.IsNullOrEmpty(effectId)) return;
+		if (!_dynamicAttachmentModifiers.TryGetValue(weaponName, out var list))
+		{
+			list = new System.Collections.Generic.List<StatModifier>();
+			_dynamicAttachmentModifiers[weaponName] = list;
+		}
+		list.RemoveAll(m => m.EffectId == effectId);
+		list.Add(new StatModifier { EffectId = effectId, Value = value });
+		OnModifiersChanged();
+	}
+
+	public void AddAttachmentModifier(string weaponName, StatModifier modifier)
+	{
+		if (string.IsNullOrEmpty(weaponName) || modifier == null || string.IsNullOrEmpty(modifier.EffectId)) return;
+		if (!_dynamicAttachmentModifiers.TryGetValue(weaponName, out var list))
+		{
+			list = new System.Collections.Generic.List<StatModifier>();
+			_dynamicAttachmentModifiers[weaponName] = list;
+		}
+		list.Add(modifier);
+		OnModifiersChanged();
+	}
+
+	public void RemoveAttachmentModifier(string weaponName, string effectId)
+	{
+		if (string.IsNullOrEmpty(weaponName) || string.IsNullOrEmpty(effectId)) return;
+		if (_dynamicAttachmentModifiers.TryGetValue(weaponName, out var list))
+		{
+			if (list.RemoveAll(m => m.EffectId == effectId) > 0)
+				OnModifiersChanged();
+		}
+	}
+
+	public void ClearAttachmentModifiers(string weaponName)
+	{
+		if (_dynamicAttachmentModifiers.Remove(weaponName))
+			OnModifiersChanged();
+	}
+
+	private void OnModifiersChanged()
+	{
+		if (_currentWeapon != null)
+		{
+			int max = MagazineSize;
+			if (max > 0 && _currentAmmo > max)
+			{
+				_currentAmmo = max;
+			}
+			_viewmodel?.SetAdsSpeedMultiplier(GetEffectiveAdsSpeedMultiplier());
+			_viewmodel?.SetVisualKickMultiplier(GetEffectiveVisualKickMultiplier());
+		}
+	}
+
+	public float GetAttachmentModifier(string effectId, float defaultValue) =>
+		GetAttachmentModifier(_currentWeapon, effectId, defaultValue);
+
+	public float GetAttachmentModifier(WeaponData? weapon, string effectId, float defaultValue)
+	{
+		if (weapon == null || string.IsNullOrEmpty(effectId)) return defaultValue;
+		bool isMult = effectId.EndsWith("Mult");
+		bool found = false;
+		float total = isMult ? 1.0f : 0.0f;
+
+		if (_dynamicAttachmentModifiers.TryGetValue(weapon.WeaponName, out var list))
+		{
+			foreach (var mod in list)
+			{
+				if (mod != null && mod.EffectId == effectId)
+				{
+					if (isMult) total *= mod.Value;
+					else total += mod.Value;
+					found = true;
+				}
+			}
+		}
+
+		float fromWeapon = weapon.GetModifier(effectId, float.NaN);
+		if (!float.IsNaN(fromWeapon))
+		{
+			if (isMult) total *= fromWeapon;
+			else total += fromWeapon;
+			found = true;
+		}
+
+		return found ? total : defaultValue;
+	}
+
+	// -------------------------------------------------------------------------------------------
+	// 8 Attachment Stat Modifiers Calculation
+	// -------------------------------------------------------------------------------------------
+
+	/// <summary>1. ADS Speed: Multiplier on aim transition speed (higher = faster ADS).</summary>
+	public float GetEffectiveAdsSpeedMultiplier()
+	{
+		float mult = 1.0f;
+		if (_currentWeapon != null)
+		{
+			mult *= GetAttachmentModifier(WeaponAttachmentEffectIds.AdsSpeedMult, 1.0f);
+			float aimTime = GetAttachmentModifier(CharacterEffectIds.AimTimeMult, 1.0f);
+			if (aimTime > 0.001f && !Mathf.IsEqualApprox(aimTime, 1.0f))
+				mult /= aimTime;
+		}
+		if (_loadout != null)
+		{
+			float aimTime = _loadout.GetModifier(CharacterEffectIds.AimTimeMult, 1.0f);
+			if (aimTime > 0.001f && !Mathf.IsEqualApprox(aimTime, 1.0f))
+				mult /= aimTime;
+		}
+		return Mathf.Max(0.05f, mult);
+	}
+
+	/// <summary>2. Switch Speed: Multiplier on weapon swap speed (higher = faster swap).</summary>
+	public float GetEffectiveSwitchSpeedMultiplier()
+	{
+		float mult = 1.0f;
+		if (_currentWeapon != null)
+		{
+			mult *= GetAttachmentModifier(WeaponAttachmentEffectIds.SwitchSpeedMult, 1.0f);
+			float swapTime = GetAttachmentModifier(CharacterEffectIds.WeaponSwapSpeedMult, 1.0f);
+			if (swapTime > 0.001f && !Mathf.IsEqualApprox(swapTime, 1.0f))
+				mult /= swapTime;
+		}
+		if (_loadout != null)
+		{
+			float swapTime = _loadout.GetModifier(CharacterEffectIds.WeaponSwapSpeedMult, 1.0f);
+			if (swapTime > 0.001f && !Mathf.IsEqualApprox(swapTime, 1.0f))
+				mult /= swapTime;
+		}
+		// Spark perk: Quick Draw (+20% weapon swap speed)
+		if (_loadout?.CharacterId == "shooter_spark") mult *= 1.20f;
+		return Mathf.Max(0.05f, mult);
+	}
+
+	public float GetEffectiveSwapCooldown() =>
+		WeaponSwapCooldown / GetEffectiveSwitchSpeedMultiplier();
+
+	public const float AdrenalineReloadSpeedMultiplier = 1.20f;
+
+	public static bool IsSidearm(WeaponData? weapon)
+	{
+		if (weapon == null) return false;
+		if (string.Equals(weapon.WeaponClass, "Sidearm", System.StringComparison.OrdinalIgnoreCase) ||
+		    string.Equals(weapon.WeaponClass, "Pistol", System.StringComparison.OrdinalIgnoreCase))
+			return true;
+		if (string.Equals(weapon.WeaponName, "Glock 19", System.StringComparison.OrdinalIgnoreCase) ||
+		    string.Equals(weapon.WeaponName, "FN 502", System.StringComparison.OrdinalIgnoreCase) ||
+		    string.Equals(weapon.WeaponName, "Desert Eagle", System.StringComparison.OrdinalIgnoreCase))
+			return true;
+		return false;
+	}
+
+	public bool IsCurrentWeaponSidearm => IsSidearm(_currentWeapon);
+
+	/// <summary>3. Reload Speed: Multiplier on reload speed (higher = faster reload).</summary>
+	public float GetEffectiveReloadSpeedMultiplier()
+	{
+		float mult = 1.0f;
+		if (_currentWeapon != null)
+		{
+			mult *= GetAttachmentModifier(WeaponAttachmentEffectIds.ReloadSpeedMult, 1.0f);
+		}
+		// Spark perk: Quick Draw (+20% reload speed)
+		if (_loadout?.CharacterId == "shooter_spark") mult *= 1.20f;
+		// Stim perk: Adrenaline Boost (+20% reload speed)
+		if (_health != null && _health.IsAdrenalineActive) mult *= AdrenalineReloadSpeedMultiplier;
+		return Mathf.Max(0.05f, mult);
+	}
+
+	public float GetEffectiveReloadTime()
+	{
+		if (_currentWeapon == null) return 0.1f;
+		float baseTime = _currentWeapon.ReloadTime > 0.0f ? _currentWeapon.ReloadTime : 0.1f;
+		return baseTime / GetEffectiveReloadSpeedMultiplier();
+	}
+
+	/// <summary>4. Vertical Recoil: Multiplier on vertical recoil kick (lower = less kick).</summary>
+	public float GetEffectiveVerticalRecoil()
+	{
+		if (_currentWeapon == null) return 0.0f;
+		float mult = 1.0f;
+		mult *= GetAttachmentModifier(WeaponAttachmentEffectIds.VerticalRecoilMult, 1.0f);
+		mult *= GetAttachmentModifier(CharacterEffectIds.WeaponRecoilMult, 1.0f);
+		mult *= _loadout?.GetModifier(CharacterEffectIds.WeaponRecoilMult, 1.0f) ?? 1.0f;
+		// Viper perk: Precision Stabilizer (-15% recoil while in vehicle)
+		if (_movement != null && _movement.IsInVehicle && _loadout?.CharacterId == "shooter_viper") mult *= 0.85f;
+		if (_movement != null && _movement.IsAiming) mult *= 0.5f;
+		return _currentWeapon.RecoilVertical * mult;
+	}
+
+	/// <summary>5. Horizontal Recoil: Multiplier on horizontal recoil kick (lower = less kick).</summary>
+	public float GetEffectiveHorizontalRecoil()
+	{
+		if (_currentWeapon == null) return 0.0f;
+		float mult = 1.0f;
+		mult *= GetAttachmentModifier(WeaponAttachmentEffectIds.HorizontalRecoilMult, 1.0f);
+		mult *= GetAttachmentModifier(CharacterEffectIds.WeaponRecoilMult, 1.0f);
+		mult *= _loadout?.GetModifier(CharacterEffectIds.WeaponRecoilMult, 1.0f) ?? 1.0f;
+		// Viper perk: Precision Stabilizer (-15% recoil while in vehicle)
+		if (_movement != null && _movement.IsInVehicle && _loadout?.CharacterId == "shooter_viper") mult *= 0.85f;
+		if (_movement != null && _movement.IsAiming) mult *= 0.5f;
+		return _currentWeapon.RecoilHorizontal * mult;
+	}
+
+	/// <summary>6. Bullet Spread: Multiplier on spread cone half-angle (lower = tighter).</summary>
+	public float GetEffectiveSpreadDegrees()
+	{
+		if (_currentWeapon == null) return 0.0f;
+		float mult = GetAttachmentModifier(WeaponAttachmentEffectIds.BulletSpreadMult, 1.0f);
+		return _currentWeapon.SpreadDegrees * mult;
+	}
+
+	/// <summary>7. Visual Kick: Multiplier on viewmodel recoil kick (lower = less screen jump).</summary>
+	public float GetEffectiveVisualKickMultiplier()
+	{
+		float mult = 1.0f;
+		if (_currentWeapon != null)
+		{
+			mult *= GetAttachmentModifier(WeaponAttachmentEffectIds.VisualKickMult, 1.0f);
+		}
+		return Mathf.Max(0.0f, mult);
+	}
+
+	/// <summary>8. Ammo Capacity: Effective magazine capacity including modifiers.</summary>
+	public int GetEffectiveMagazineSize(WeaponData? weapon)
+	{
+		if (weapon == null || weapon.MagazineSize <= 0) return 0;
+		float mult = GetAttachmentModifier(weapon, WeaponAttachmentEffectIds.AmmoCapacityMult, 1.0f);
+		int delta = (int)GetAttachmentModifier(weapon, WeaponAttachmentEffectIds.AmmoCapacityDelta, 0.0f);
+		if (_loadout != null && (weapon.WeaponClass == "Assault Rifle" || weapon.WeaponClass == "SMG"))
+		{
+			mult *= _loadout.GetModifier(CharacterEffectIds.ReserveAmmoMult, 1.0f);
+			// Flash perk: Overclocked Mag (+15% magazine capacity across assault rifles and SMGs)
+			if (_loadout.CharacterId == "shooter_flash") mult *= 1.15f;
+		}
+		return Mathf.Max(1, Mathf.RoundToInt(weapon.MagazineSize * mult) + delta);
+	}
+
 	// Read-only surface for the HUD. Kept separate from the fields above so nothing outside this
 	// script can mutate combat state directly.
-	public string WeaponName => _currentWeapon?.WeaponName ?? string.Empty;
+	public string WeaponName => (_currentWeapon?.WeaponClass == "Melee" && !string.IsNullOrEmpty(ActiveMeleeWeapon))
+		? ActiveMeleeWeapon
+		: (_currentWeapon?.WeaponName ?? string.Empty);
 	public int CurrentAmmo => _currentAmmo;
-	public int MagazineSize => _currentWeapon?.MagazineSize ?? 0;
+	public int MagazineSize => GetEffectiveMagazineSize(_currentWeapon);
 
 	/// <summary>Rounds left in reserve, beyond what's loaded. Always 0 for a melee weapon.</summary>
 	public int CurrentReserve => _currentReserve;
@@ -145,7 +390,7 @@ public partial class WeaponSwitcher : Node
 	public void RefillAmmo()
 	{
 		if (_currentWeapon == null) return;
-		_currentAmmo = _currentWeapon.MagazineSize;
+		_currentAmmo = MagazineSize;
 		_currentReserve = _currentWeapon.MaxReserveAmmo;
 		_reloadRemaining = 0.0f;
 	}
@@ -157,17 +402,34 @@ public partial class WeaponSwitcher : Node
 
 	public void DrainMagazine()
 	{
-		if (_currentWeapon != null && _currentWeapon.MagazineSize > 0) _currentAmmo = 0;
+		if (_currentWeapon != null && MagazineSize > 0) _currentAmmo = 0;
 	}
 
 	public void SetLoadedRounds(int rounds)
 	{
-		if (_currentWeapon != null && _currentWeapon.MagazineSize > 0)
-			_currentAmmo = Mathf.Clamp(rounds, 0, _currentWeapon.MagazineSize);
+		int max = MagazineSize;
+		if (_currentWeapon != null && max > 0)
+			_currentAmmo = Mathf.Clamp(rounds, 0, max);
 	}
+
+	public static string ActiveMeleeWeapon { get; set; } = "Karambit";
 
 	public bool EquipByName(string weaponName)
 	{
+		if (weaponName == "Sledge Hammer" || weaponName == "Karambit")
+		{
+			ActiveMeleeWeapon = weaponName;
+			int meleeIdx = System.Array.IndexOf(Loadout, "Karambit");
+			if (meleeIdx >= 0)
+			{
+				if (_appliedWeaponIndex == meleeIdx)
+				{
+					ApplyWeaponIndex(meleeIdx, force: true);
+					return true;
+				}
+				return TryEquip(meleeIdx);
+			}
+		}
 		int index = System.Array.IndexOf(Loadout, weaponName);
 		return index >= 0 && TryEquip(index);
 	}
@@ -200,7 +462,7 @@ public partial class WeaponSwitcher : Node
 
 		if (index == _appliedWeaponIndex) { magazine = _currentAmmo; reserve = _currentReserve; }
 		else if (KeepAmmoPerWeapon && _hasSavedAmmo[index]) { magazine = _savedAmmo[index]; reserve = _savedReserve[index]; }
-		else { magazine = weapon.MagazineSize; reserve = weapon.MaxReserveAmmo; }
+		else { magazine = GetEffectiveMagazineSize(weapon); reserve = weapon.MaxReserveAmmo; }
 		return true;
 	}
 
@@ -213,7 +475,7 @@ public partial class WeaponSwitcher : Node
 		if (index < 0 || index >= Loadout.Length) return false;
 		if (string.IsNullOrEmpty(Loadout[index])) return false;
 		if (!CanCarryIndex(index)) return false;
-		if (_health != null && _health.IsDead) return false;
+		if (_health != null && (_health.IsDead || _health.IsDowned)) return false;
 		ReplicatedWeaponIndex = index;
 		return true;
 	}
@@ -356,7 +618,7 @@ public partial class WeaponSwitcher : Node
 			if (InputMap.HasAction("weapon_cycle_next") && Input.IsActionJustPressed("weapon_cycle_next")) CycleCarried();
 		}
 
-		if (_health != null && _health.IsDead) return;
+		if (_health != null && (_health.IsDead || _health.IsDowned)) return;
 
 		if (!_movement.IsVehicleDriver && (bot != null ? bot.ConsumeReload() : (!inputBlocked && Input.IsActionJustPressed("reload")))) StartReload();
 
@@ -373,9 +635,12 @@ public partial class WeaponSwitcher : Node
 	// Equipping
 	// -------------------------------------------------------------------------------------------
 
-	private void ApplyWeaponIndex(int index)
+	private void ApplyWeaponIndex(int index, bool force = false)
 	{
-		if (_registry == null || index == _appliedWeaponIndex) return;
+		string wantedVm = (index >= 0 && index < Loadout.Length && Loadout[index] == "Karambit" && ActiveMeleeWeapon == "Sledge Hammer")
+			? "Sledge Hammer"
+			: (index >= 0 && index < Loadout.Length ? Loadout[index] : string.Empty);
+		if (_registry == null || (!force && index == _appliedWeaponIndex && _viewmodel?.ActiveWeaponName == wantedVm)) return;
 		if (index < 0 || index >= Loadout.Length)
 		{
 			GD.PushError($"Weapon index {index} is outside the {Loadout.Length}-slot test loadout.");
@@ -395,13 +660,16 @@ public partial class WeaponSwitcher : Node
 			}
 			else
 			{
-				_currentAmmo = weapon.MagazineSize;
+				_currentAmmo = GetEffectiveMagazineSize(weapon);
 				_currentReserve = weapon.MaxReserveAmmo;
 			}
-			_cooldownRemaining = Mathf.Max(_cooldownRemaining, WeaponSwapCooldown);
+			_cooldownRemaining = Mathf.Max(_cooldownRemaining, GetEffectiveSwapCooldown());
 			_reloadRemaining = 0.0f;
 			_attachment.Equip(weapon);
-			_viewmodel?.EquipWeapon(weapon.WeaponName);
+			string vmName = (weapon.WeaponClass == "Melee" && ActiveMeleeWeapon == "Sledge Hammer") ? "Sledge Hammer" : weapon.WeaponName;
+			_viewmodel?.EquipWeapon(vmName);
+			_viewmodel?.SetAdsSpeedMultiplier(GetEffectiveAdsSpeedMultiplier());
+			_viewmodel?.SetVisualKickMultiplier(GetEffectiveVisualKickMultiplier());
 			WeaponEquipped?.Invoke(weapon);
 			return;
 		}
@@ -425,7 +693,7 @@ public partial class WeaponSwitcher : Node
 	{
 		for (int i = 0; i < Loadout.Length; i++) _hasSavedAmmo[i] = false;
 		if (_currentWeapon == null) return;
-		_currentAmmo = _currentWeapon.MagazineSize;
+		_currentAmmo = MagazineSize;
 		_currentReserve = _currentWeapon.MaxReserveAmmo;
 		_reloadRemaining = 0.0f;
 	}
@@ -436,8 +704,8 @@ public partial class WeaponSwitcher : Node
 
 	private void TryFire()
 	{
-		if (_currentWeapon == null) return;
-		bool infiniteAmmo = _currentWeapon.MagazineSize <= 0;
+		if (_currentWeapon == null || (_health != null && (_health.IsDead || _health.IsDowned))) return;
+		bool infiniteAmmo = MagazineSize <= 0;
 
 		if (!infiniteAmmo && _currentAmmo <= 0)
 		{
@@ -446,7 +714,7 @@ public partial class WeaponSwitcher : Node
 			// reserve ammo left to pull from - otherwise this is just "out of ammo".
 			_attachment.PlayEmpty();
 			_cooldownRemaining = 0.35f;
-			if (_reloadRemaining <= 0.0f && _currentReserve > 0) StartReload();
+			if (_reloadRemaining <= 0.0f && (_currentReserve > 0 || IsCurrentWeaponSidearm)) StartReload();
 			return;
 		}
 
@@ -472,10 +740,9 @@ public partial class WeaponSwitcher : Node
 
 		int pellets = Mathf.Max(1, _currentWeapon.PelletsPerShot);
 		ShotFired?.Invoke(_currentWeapon, pellets);
+		float spread = GetEffectiveSpreadDegrees();
 		for (int i = 0; i < pellets; i++)
-			FireHitscan(spreadDegrees: pellets > 1 || _currentWeapon.SpreadDegrees > 0.0f
-				? _currentWeapon.SpreadDegrees
-				: 0.0f);
+			FireHitscan(spreadDegrees: (pellets > 1 || spread > 0.0f) ? spread : 0.0f);
 	}
 
 	/// <summary>Broadcasts fire audio and muzzle flash so remote peers see and hear each shot.
@@ -488,6 +755,7 @@ public partial class WeaponSwitcher : Node
 		_attachment.PlayFire();
 		// This is the same replicated fire-effects event as the world weapon. The local-only
 		// viewmodel has its own live muzzle anchor, so it can follow animation/recoil exactly.
+		_viewmodel?.SetVisualKickMultiplier(GetEffectiveVisualKickMultiplier());
 		_viewmodel?.PlayMuzzleFire();
 		_viewmodel?.Play("fire");
 		// Bots (host only) hear the shot: everyone nearby learns roughly where it came from.
@@ -503,7 +771,7 @@ public partial class WeaponSwitcher : Node
 	{
 		if (!IsAuthorizedEffectSender()) return;
 		_attachment.PlayReload();
-		_viewmodel?.PlayReload(_currentWeapon?.ReloadTime ?? 0.0f, _currentAmmo == 0);
+		_viewmodel?.PlayReload(GetEffectiveReloadTime(), _currentAmmo == 0);
 	}
 
 	/// <summary>A shell-by-shell reload interrupted by firing: stop the reload sound on every peer.</summary>
@@ -532,13 +800,10 @@ public partial class WeaponSwitcher : Node
 	private void ApplyRecoil()
 	{
 		if (_currentWeapon == null) return;
-		float horizontal = _rng.RandfRange(-_currentWeapon.RecoilHorizontal, _currentWeapon.RecoilHorizontal);
-		// Aiming down sights cuts the kick roughly in half, which is the usual reason to ADS at all.
-		float multiplier = _movement.IsAiming ? 0.5f : 1.0f;
-		// Operator kit (e.g. a steady-hands buff); 1.0 when no operator or no such effect.
-		multiplier *= _loadout?.GetModifier(CharacterEffectIds.WeaponRecoilMult, 1.0f) ?? 1.0f;
-		_movement.AddRecoil(_currentWeapon.RecoilVertical * multiplier, horizontal * multiplier,
-			_currentWeapon.RecoilRecoveryMs);
+		float maxHoriz = GetEffectiveHorizontalRecoil();
+		float horizontal = _rng.RandfRange(-maxHoriz, maxHoriz);
+		float vertical = GetEffectiveVerticalRecoil();
+		_movement.AddRecoil(vertical, horizontal, _currentWeapon.RecoilRecoveryMs);
 	}
 
 	private void FireHitscan(float spreadDegrees)
@@ -555,8 +820,36 @@ public partial class WeaponSwitcher : Node
 		var result = _player.GetWorld3D().DirectSpaceState.IntersectRay(query);
 		bool hitSomething = result.Count > 0;
 		Vector3 impactPoint = hitSomething ? (Vector3)result["position"] : to;
+
+		if (!hitSomething && melee)
+		{
+			// Sphere cast for melee to reliably catch targets in the swing cone
+			var sphereShape = new SphereShape3D { Radius = 0.45f };
+			var shapeQuery = new PhysicsShapeQueryParameters3D
+			{
+				Shape = sphereShape,
+				Transform = new Transform3D(Basis.Identity, from + direction * (range * 0.65f)),
+				Exclude = new Godot.Collections.Array<Rid> { _player.GetRid() }
+			};
+			var restInfo = _player.GetWorld3D().DirectSpaceState.GetRestInfo(shapeQuery);
+			if (restInfo.Count > 0 && restInfo.ContainsKey("collider_id"))
+			{
+				ulong colId = (ulong)restInfo["collider_id"].AsUInt64();
+				var hitObj = InstanceFromId(colId) as Node;
+				if (hitObj != null)
+				{
+					hitSomething = true;
+					impactPoint = (Vector3)restInfo["point"];
+					result["collider"] = hitObj;
+					result["position"] = impactPoint;
+					result["normal"] = (Vector3)restInfo["normal"];
+				}
+			}
+		}
+
 		if (hitSomething && result["collider"].As<Node>() is IShootable shootable)
 		{
+			if (melee) _movement?.AddRecoil(-1.2f, 0.0f, 120.0f);
 			HandleShootableHit(shootable, impactPoint, from, direction, melee);
 			return;
 		}
@@ -590,9 +883,12 @@ public partial class WeaponSwitcher : Node
 		// Head zone first: it decides both the damage (FR-WP-05 uses the weapon's own stat) and the
 		// headshot style bonus.
 		bool headshot = IsHeadZoneHit(body, impactPoint);
-		float damage = headshot && _currentWeapon.HeadshotDamage > 0.0f
+		float baseDamage = headshot && _currentWeapon.HeadshotDamage > 0.0f
 			? _currentWeapon.HeadshotDamage
 			: _currentWeapon.BodyDamage;
+		float damage = _currentWeapon.PelletsPerShot > 1
+			? baseDamage / _currentWeapon.PelletsPerShot
+			: baseDamage;
 		KillStyle styles = CaptureKillStyle(headshot, melee);
 
 		// Identity, not authority: a bot shares the host's authority but has its own id.
@@ -602,7 +898,7 @@ public partial class WeaponSwitcher : Node
 		// before the damage is sent so the victim's health is still what it was when the bullet landed.
 		if (!targetHealth.IsDead && PlayerIdentity.IsLocalHuman(_player))
 			CareerTracker.Instance?.NoteHit(PlayerIdentity.IdOf(body), _currentWeapon.WeaponName,
-				from.DistanceTo(impactPoint), _currentAmmo, _currentWeapon.MagazineSize, _shotSerial,
+				from.DistanceTo(impactPoint), _currentAmmo, MagazineSize, _shotSerial,
 				targetHealth.CurrentHealth, targetHealth.MaxHealth);
 		if (targetId == Multiplayer.GetUniqueId())
 		{
@@ -623,6 +919,7 @@ public partial class WeaponSwitcher : Node
 			_fleshSoundsThisShot++;
 			Rpc(MethodName.RpcFleshImpact, impactPoint);
 		}
+		if (melee) _movement?.AddRecoil(-1.2f, 0.0f, 120.0f);
 		PlayHitMarker();
 	}
 
@@ -631,7 +928,18 @@ public partial class WeaponSwitcher : Node
 	{
 		WeaponData weapon = _currentWeapon!;
 		bool headshot = target.IsHeadHit(impactPoint);
-		float damage = headshot && weapon.HeadshotDamage > 0.0f ? weapon.HeadshotDamage : weapon.BodyDamage;
+		float baseDamage = headshot && weapon.HeadshotDamage > 0.0f ? weapon.HeadshotDamage : weapon.BodyDamage;
+		float damage = weapon.PelletsPerShot > 1 ? baseDamage / weapon.PelletsPerShot : baseDamage;
+		if (IsRocket(weapon) && !target.IsFleshTarget)
+		{
+			// Direct hit from Bazooka destroys vehicle immediately (100 HP)
+			damage = 100.0f;
+		}
+		else if (melee && !target.IsFleshTarget)
+		{
+			// Melee cannot destroy armored vehicles or hard targets
+			damage = 0.0f;
+		}
 		KillStyle styles = CaptureKillStyle(headshot, melee);
 		target.ReceiveShot(new ShotInfo
 		{
@@ -645,7 +953,8 @@ public partial class WeaponSwitcher : Node
 		PlayHitMarker();
 	}
 
-	private static bool IsRocket(WeaponData weapon) => weapon.WeaponClass == "Launcher";
+	private static bool IsRocket(WeaponData weapon) =>
+		weapon.WeaponClass == "Launcher" || weapon.WeaponClass == "Anti-Vehicle";
 
 	/// <summary>A bullet hitting world geometry: work out what it hit (and whether it skips off),
 	/// then tell every peer so they all hear the same sound. Decided here, on the shooter's device,
@@ -801,10 +1110,11 @@ public partial class WeaponSwitcher : Node
 
 	private void StartReload()
 	{
-		if (_currentWeapon == null || _reloadRemaining > 0.0f) return;
-		bool infiniteAmmo = _currentWeapon.MagazineSize <= 0;
-		if (infiniteAmmo || _currentAmmo >= _currentWeapon.MagazineSize || _currentReserve <= 0) return;
-		_reloadRemaining = _currentWeapon.ReloadTime > 0.0f ? _currentWeapon.ReloadTime : 0.1f;
+		if (_currentWeapon == null || _reloadRemaining > 0.0f || (_health != null && (_health.IsDead || _health.IsDowned))) return;
+		bool infiniteAmmo = MagazineSize <= 0;
+		if (infiniteAmmo || _currentAmmo >= MagazineSize) return;
+		if (_currentReserve <= 0 && !IsCurrentWeaponSidearm) return;
+		_reloadRemaining = GetEffectiveReloadTime();
 		ReloadStarted?.Invoke(_currentWeapon);
 		Rpc(MethodName.RpcReloadEffects);
 	}
@@ -814,22 +1124,31 @@ public partial class WeaponSwitcher : Node
 		_reloadRemaining = 0.0f;
 		if (_currentWeapon == null) return;
 
+		bool isSidearm = IsCurrentWeaponSidearm;
+		int effectiveMag = MagazineSize;
 		if (_currentWeapon.ShellByShellReload)
 		{
 			// One shell per cycle, then start the next one if the tube still has room and the
 			// reserve still has a shell to feed it. ReloadTime is the per-shell time for these, so
 			// a full Mossberg tube takes 6 x 0.5 s and can be cut short at any point by firing.
-			if (_currentReserve <= 0) return;
+			if (_currentReserve <= 0 && !isSidearm) return;
 			_currentAmmo++;
-			_currentReserve--;
-			if (_currentAmmo < _currentWeapon.MagazineSize && _currentReserve > 0) StartReload();
+			if (!isSidearm) _currentReserve--;
+			if (_currentAmmo < effectiveMag && (_currentReserve > 0 || isSidearm)) StartReload();
 			return;
 		}
 
-		int needed = _currentWeapon.MagazineSize - _currentAmmo;
-		int drawn = Mathf.Min(needed, _currentReserve);
-		_currentAmmo += drawn;
-		_currentReserve -= drawn;
+		int needed = effectiveMag - _currentAmmo;
+		if (isSidearm)
+		{
+			_currentAmmo = effectiveMag;
+		}
+		else
+		{
+			int drawn = Mathf.Min(needed, _currentReserve);
+			_currentAmmo += drawn;
+			_currentReserve -= drawn;
+		}
 	}
 
 	// -------------------------------------------------------------------------------------------
@@ -862,7 +1181,7 @@ public partial class WeaponSwitcher : Node
 	public void RestockAmmo()
 	{
 		if (_currentWeapon == null) return;
-		_currentAmmo = _currentWeapon.MagazineSize;
+		_currentAmmo = MagazineSize;
 		_currentReserve = _currentWeapon.MaxReserveAmmo;
 		_reloadRemaining = 0.0f;
 	}
